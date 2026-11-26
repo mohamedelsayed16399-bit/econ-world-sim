@@ -365,7 +365,7 @@ const fmtD=n=>fmt(n)+' د.';
 const rnd=(a,b)=>a+Math.random()*(b-a);
 const gauss=()=> (Math.random()+Math.random()+Math.random()+Math.random()-2)/1.0;
 
-const SECTORS=['تقنية','طاقة','أغذية','بنوك','نقل','أدوية','عقارات','تجزئة'];
+const SECTORS=['تقنية','طاقة','أغذية','بنوك','نقل','أدوية','عقارات','تجزئة','كريبتو'];
 const CITIES=[
   {n:'القاهرة',cost:50000,mult:1.0},{n:'الرياض',cost:120000,mult:1.3},{n:'دبي',cost:150000,mult:1.45},
   {n:'لندن',cost:250000,mult:1.7},{n:'طوكيو',cost:280000,mult:1.75},{n:'نيويورك',cost:320000,mult:1.9},
@@ -389,6 +389,7 @@ const COMPS=[
 ];
 const FX=[['دولار',1.0],['يورو',1.09],['جنيه',0.032],['ين',0.0067]];
 const CMD=[['ذهب',74],['نفط',82],['قمح',6.4]];
+const CRYPTO=[['بيتكوين',45000,0.06],['إيثريوم',3200,0.075],['ميم كوين',0.5,0.16]];
 const NPC_NAMES=['الحاج سليمان','مدام كريمة','المهندس طارق','الأسطى رمضان','د. سوسن','الكابتن مجدي','الست ليلى','باشا فؤاد','أنور بيك','الحاجة زينب','سيد الغفار','نادية شكري'];
 
 const NEWS_T=[
@@ -421,6 +422,10 @@ const NEWS_T=[
  {t:'مخاوف ركود عالمي',k:'all',m:-.04,hot:1},
  {t:'أمراض تضرب المواشي',k:'sector',s:'أغذية',m:.07,hot:1},
  {t:'دعم حكومي للمزارعين',k:'sector',s:'أغذية',m:-.04,g:1},
+ {t:'اعتماد بيتكوين عملة رسمية في دولة كبرى',k:'crypto',m:.14,hot:1,g:1},
+ {t:'حملة تنظيمية عالمية على الكريبتو',k:'crypto',m:-.13,hot:1},
+ {t:'اختراق أكبر منصة تداول رقمية',k:'crypto',m:-.10,hot:1},
+ {t:'موجة اهتمام مؤسسي بالكريبتو',k:'crypto',m:.09,g:1},
 ];
 
 /* الحالة */
@@ -433,6 +438,7 @@ function freshState(){
     sent:0,trend:0,hist:[c[2]],held:0,avg:0,short:0,shortAvg:0,div:0.004+Math.random()*0.01};});
   FX.forEach(c=>{st.assets['ع:'+c[0]]={kind:'fx',name:c[0],price:c[1],base:c[1],vol:0.008,sent:0,trend:0,hist:[c[1]],held:0,avg:0,short:0,shortAvg:0};});
   CMD.forEach(c=>{st.assets['م:'+c[0]]={kind:'cmd',name:c[0],price:c[1],base:c[1],vol:0.03,sent:0,trend:0,hist:[c[1]],held:0,avg:0,short:0,shortAvg:0};});
+  CRYPTO.forEach(c=>{st.assets['ك:'+c[0]]={kind:'crypto',name:c[0],sector:'كريبتو',price:c[1],base:c[1],vol:c[2],sent:0,trend:0,hist:[c[1]],held:0,avg:0,short:0,shortAvg:0};});
   st.npcs=NPC_NAMES.map(n=>({name:n,worth:rnd(60000,900000),prev:0}));
   SECTORS.forEach(s=>st.sectorHist[s]=[100]);
   st.orders=[];st.alerts=[];st.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};st.snd=true;
@@ -502,7 +508,7 @@ function tick(){
 
   for(const k in S.assets){
     const a=S.assets[k];
-    const drift = a.trend + a.sent*0.4 + S.mood*(a.kind==='stock'?0.25:a.kind==='cmd'?0.08:-0.05) + (a.kind==='stock'?0.00025:0);
+    const drift = a.trend + a.sent*0.4 + S.mood*(a.kind==='stock'?0.25:a.kind==='cmd'?0.08:a.kind==='crypto'?0.4:-0.05) + (a.kind==='stock'?0.00025:0);
     const chg = drift*0.02 + gauss()*a.vol*0.16;
     a.price=Math.max(a.base*0.05, a.price*(1+chg));
     a.sent*=0.97;
@@ -524,7 +530,7 @@ function tick(){
   // مؤشرات القطاعات
   SECTORS.forEach(sec=>{
     let s=0,n=0;
-    for(const k in S.assets){const a=S.assets[k];if(a.kind==='stock'&&a.sector===sec){s+=a.price/a.base;n++;}}
+    for(const k in S.assets){const a=S.assets[k];if((a.kind==='stock'||a.kind==='crypto')&&a.sector===sec){s+=a.price/a.base;n++;}}
     if(n){const h=S.sectorHist[sec];h.push(100*s/n);if(h.length>2200)h.shift();}
   });
   // نهاية اليوم
@@ -544,6 +550,19 @@ function endOfDay(){
       pushNews(S,'✂️ تقسيم سهم '+a.name+' (1 لـ 2) بعد تجاوزه 400 د.',0,true,true);
       toast('✂️ تقسيم سهم '+a.name+': أسهمك اتضاعفت');
     }});
+  // موسم الأرباح كل 10 أيام
+  if(S.day%10===0){
+    let beats=0,misses=0;
+    Object.keys(S.assets).forEach(k=>{const a=S.assets[k];
+      if(a.kind!=='stock')return;
+      const surp=gauss();
+      a.price=Math.max(a.base*0.05,a.price*(1+surp*0.055));
+      a.hist[a.hist.length-1]=a.price;
+      if(surp>1.4){beats++;if(beats<=2)pushNews(S,'📊 '+a.name+' تفوق التوقعات بأرباح قوية',surp*0.04,true,true);}
+      else if(surp<-1.4){misses++;if(misses<=2)pushNews(S,'📉 '+a.name+' تخيب الآمال في نتائجها',surp*0.04,true);}
+    });
+    toast('📊 موسم الأرباح: '+beats+' فاقت التوقعات و'+misses+' خيّبت');
+  }
   // أحداث عالمية
   if(S.gEvent){
     const e=S.gEvent;
@@ -718,6 +737,7 @@ function fireNews(idx){
   else if(n.k==='all'){for(const k in S.assets){const a=S.assets[k];if(a.kind==='stock')a.sent+=n.m;}}
   else if(n.k==='fx'){const a=S.assets['ع:'+n.s];if(a)a.sent+=n.m;}
   else if(n.k==='cmd'){const a=S.assets['م:'+n.s];if(a)a.sent+=n.m;}
+  else if(n.k==='crypto'){for(const k in S.assets){const a=S.assets[k];if(a.kind==='crypto')a.sent+=n.m;}}
   else if(n.k==='rate'){S.rate=Math.max(0.005,S.rate+n.m);pushNews(S,n.t+' — الفائدة الآن '+(S.rate*100).toFixed(1)+'%',n.m,n.hot);return;}
   pushNews(S,n.t,n.m,n.hot,n.g);
   refreshNewsUI();
@@ -1086,7 +1106,7 @@ function renderHead(){
 function chgPct(a){const ref=a.hist.length>24?a.hist[a.hist.length-25]:a.base;return (a.price/ref-1)*100;}
 function renderMarket(){
   const tb=$('stockTbl').tBodies[0];tb.innerHTML='';
-  let keys=Object.keys(S.assets).filter(k=>S.assets[k].kind==='stock'&&(!secFilter||S.assets[k].sector===secFilter));
+  let keys=Object.keys(S.assets).filter(k=>(S.assets[k].kind==='stock'||S.assets[k].kind==='crypto')&&(!secFilter||S.assets[k].sector===secFilter));
   if(S.sortKey==='price')keys.sort((x,y)=>S.assets[y].price-S.assets[x].price);
   else if(S.sortKey==='chg')keys.sort((x,y)=>chgPct(S.assets[y])-chgPct(S.assets[x]));
   else if(S.sortKey==='loss')keys.sort((x,y)=>chgPct(S.assets[x])-chgPct(S.assets[y]));
@@ -1428,7 +1448,7 @@ function renderNotifs(){
 }
 function renderMovers(){
   const el=$('movers');if(!el)return;
-  const stocks=Object.keys(S.assets).filter(k=>S.assets[k].kind==='stock');
+  const stocks=Object.keys(S.assets).filter(k=>S.assets[k].kind==='stock'||S.assets[k].kind==='crypto');
   const byChg=stocks.slice().sort((x,y)=>chgPct(S.assets[y])-chgPct(S.assets[x]));
   const fmt1=k=>{const a=S.assets[k],c=chgPct(a);return '<div style="display:flex;justify-content:space-between;font-size:13px;margin:2px 0"><span>'+a.name+'</span><span class="'+(c>=0?'up':'down')+'">'+(c>=0?'+':'')+c.toFixed(1)+'%</span></div>';};
   el.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div><div style="color:var(--up);font-size:12px;margin-bottom:4px">🚀 الأكثر ارتفاعًا</div>'+byChg.slice(0,3).map(fmt1).join('')+'</div><div><div style="color:var(--dn);font-size:12px;margin-bottom:4px">🔻 الأكثر انخفاضًا</div>'+byChg.slice(-3).reverse().map(fmt1).join('')+'</div></div>';
@@ -1852,6 +1872,19 @@ if(location.hash==='#test'){
     S.challenge={start:100000,target:200000,day0:S.day,days:30,rivals:[{n:'x',w:100000}]};
     S.cash=500000;tickChallenge();
     ok('فوز التحدي',S.challenge===null&&S.achv.champion===1);hideModal();
+    // كريبتو
+    ok('أصول كريبتو موجودة',!!S.assets['ك:بيتكوين']&&S.assets['ك:بيتكوين'].kind==='crypto');
+    sel='ك:بيتكوين';$('qty').value=1;const cbc=S.cash;buy();
+    ok('شراء كريبتو',S.assets['ك:بيتكوين'].held===1&&S.cash<cbc);
+    const idxC=NEWS_T.findIndex(n=>n.k==='crypto'&&n.m>0);
+    const bcSent=S.assets['ك:بيتكوين'].sent;fireNews(idxC);
+    ok('خبر كريبتو يؤثر',S.assets['ك:بيتكوين'].sent>bcSent);
+    // موسم الأرباح
+    S.day=9;endOfDay();
+    S.day=10;
+    const snap={};Object.keys(S.assets).forEach(k=>{if(S.assets[k].kind==='stock')snap[k]=S.assets[k].price;});
+    endOfDay();
+    ok('موسم أرباح يحرك الأسعار',Object.keys(snap).some(k=>S.assets[k].price!==snap[k]));
     save();ok('حفظ',!!localStorage.getItem('econLive1'));
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
   }catch(e){out.push('ERROR '+(e&&e.message));}
