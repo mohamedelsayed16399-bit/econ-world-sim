@@ -137,6 +137,7 @@ tr.row:hover,tr.row.sel{background:#182442}
     <button id="sp1">1x</button>
     <button id="sp2">4x</button>
     <button id="sp3">16x</button>
+    <button id="btnSkipDay" title="تخطي باقي اليوم">⏭ يوم</button>
   </div>
 </div>
 <div id="tickerWrap"><div id="ticker"></div></div>
@@ -1649,6 +1650,7 @@ function setSpeed(s){
 function applyTheme(){document.body.classList.toggle('light',S.theme==='light');}
 $('btnTheme').onclick=()=>{S.theme=S.theme==='light'?'dark':'light';applyTheme();save();};
 $('sp0').onclick=()=>setSpeed(0);$('sp1').onclick=()=>setSpeed(1);$('sp2').onclick=()=>setSpeed(2);$('sp3').onclick=()=>setSpeed(3);
+$('btnSkipDay').onclick=()=>{const d0=S.day;let g=0;while(S.day===d0&&g++<40)tick();save();renderAll();toast('⏭ يوم جديد: '+S.day);};
 
 /* بنك */
 $('btnDep').onclick=()=>{const v=+$('bkAmt').value||0;if(v>S.cash)return toast('❌ كاش غير كافٍ');S.cash-=v;S.dep+=v;log('إيداع '+fmtD(v));save();renderAll();};
@@ -2793,6 +2795,15 @@ if(location.hash==='#test'){
     ok('تصدير الحفظ',$('impTxt').value.includes('"assets"'));
     const day0x=S.day;$('btnImp').click();
     ok('استيراد الحفظ',S.day===day0x);
+    // اختبار جلسة طويلة: ١٥٠ يوم محاكاة متواصلة
+    let crash=null;
+    try{for(let i=0;i<150;i++){S.day++;endOfDay();}}catch(e){crash=String(e);}
+    ok('جلسة طويلة ١٥٠ يوم بدون انهيار (ثروة نهائية '+fmtD(netWorth())+')',crash===null);
+    ok('قيم مالية سليمة بعد الجلسة',isFinite(netWorth())&&isFinite(S.cash)&&!isNaN(S.dep));
+    ok('السوق حي بعد الجلسة',Object.keys(S.assets).filter(k=>S.assets[k].kind==='stock').length>=10);
+    // زر تخطي اليوم
+    const sd0=S.day;$('btnSkipDay').click();
+    ok('زر تخطي اليوم',S.day===sd0+1&&S.hour===0);
     save();ok('حفظ',!!localStorage.getItem('econLive1'));
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
   }catch(e){out.push('ERROR '+(e&&e.message));}
