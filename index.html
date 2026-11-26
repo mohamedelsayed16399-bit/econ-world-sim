@@ -134,6 +134,7 @@ tr.row:hover,tr.row.sel{background:#182442}
   </div>
 </div>
 <div id="tickerWrap"><div id="ticker"></div></div>
+<div id="goalBar" style="display:flex;align-items:center;gap:8px;padding:5px 14px;background:#0a0e18;border-bottom:1px solid var(--line)"></div>
 <div id="tabs">
   <button data-p="market" class="on">📈 السوق</button>
   <button data-p="portfolio">💼 محفظتي</button>
@@ -250,6 +251,13 @@ tr.row:hover,tr.row.sel{background:#182442}
       <h3 style="margin-top:14px">ترقيات الشركة</h3>
       <div class="tradeRow" id="upgRow"></div>
     </div>
+    <div class="card" id="rivalCard">
+      <h3>⚔️ منافسك في السوق</h3>
+      <div id="rivalInfo"></div>
+      <div class="tradeRow">
+        <button class="btnGhost" id="btnAttack">📣 حملة ضد المنافس (٨٬٠٠٠ من خزينة الشركة)</button>
+      </div>
+    </div>
     <div class="card"><h3>التقارير ربع السنوية</h3><div id="coReports"></div></div>
   </div>
 </div>
@@ -266,6 +274,17 @@ tr.row:hover,tr.row.sel{background:#182442}
       <div class="tradeRow"><input id="bkAmt2" type="number" value="10000" min="1000">
       <button class="btnBuy" id="btnBorrow">اقترض</button><button class="btnSell" id="btnRepay">سداد</button></div>
     </div>
+  </div>
+  <div class="card"><h3>🏢 العقارات (إيجار يومي + تغير سعر)</h3>
+    <div class="tblwrap"><table id="propTbl"><thead><tr><th>العقار</th><th>السعر</th><th>تملك</th><th>إيجار/يوم</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div style="font-size:12px;color:var(--dim);margin-top:6px">إجمالي الإيجارات المُحصلة: <b id="rentTot">0</b></div>
+  </div>
+  <div class="card"><h3>💵 السندات الحكومية (عائد ثابت ٤٪ كل ٣٠ يومًا)</h3>
+    <div class="tradeRow">
+      <input id="bondAmt" type="number" value="10000" min="1000">
+      <button class="btnBuy" id="btnBond">شراء سند</button>
+    </div>
+    <div id="bondList" style="margin-top:8px;font-size:13px"></div>
   </div>
   <div class="card"><h3>مؤشرات الاقتصاد الكلي</h3><div class="kpis" id="macroKpis"></div></div>
 </div>
@@ -360,6 +379,8 @@ function freshState(){
   st.npcs=NPC_NAMES.map(n=>({name:n,worth:rnd(60000,900000),prev:0}));
   SECTORS.forEach(s=>st.sectorHist[s]=[100]);
   st.orders=[];st.alerts=[];st.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};st.snd=true;
+  st.props={};st.propPrice={'شقة وسط البلد':60000,'محل تجاري':120000,'فيلا':200000,'برج مكاتب':500000};
+  st.propBase=Object.assign({},st.propPrice);st.bonds=[];st.goal=null;st.rival=null;st.tut=0;st.rentTotal=0;
   pushNews(st,'افتتاح السوق العالمية للمحاكاة — حظ موفق أيها المستثمر!',0,false);
   return st;
 }
@@ -373,6 +394,11 @@ function migrate(){
   if(!S.orders)S.orders=[];if(!S.alerts)S.alerts=[];
   if(!S.stats)S.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};
   if(S.snd==null)S.snd=true;
+  if(!S.props)S.props={};
+  if(!S.propPrice)S.propPrice={'شقة وسط البلد':60000,'محل تجاري':120000,'فيلا':200000,'برج مكاتب':500000};
+  if(!S.propBase)S.propBase=Object.assign({},S.propPrice);
+  if(!S.bonds)S.bonds=[];if(S.goal===undefined)S.goal=null;if(S.rival===undefined)S.rival=null;
+  if(!S.tut)S.tut=0;if(!S.rentTotal)S.rentTotal=0;
 }
 function pushNews(st,text,impact,hot,good){
   st.news.unshift({d:st.day,h:st.hour,text,hot:!!hot,good:!!good});
@@ -387,8 +413,10 @@ function companyValue(){
   const ann=Math.max(c.lastYearProfit,0);
   return Math.max(0,c.cash)+ann*4+c.quality*800;
 }
+function propsValue(){let v=0;for(const n in S.props){v+=S.props[n].qty*(S.propPrice[n]||S.props[n].avg);}return v;}
 function netWorth(){
-  let n=S.cash+S.dep-S.loan;
+  let n=S.cash+S.dep-S.loan+propsValue();
+  for(const k in S.bonds)n+=S.bonds[k].amt*1.04;
   for(const k in S.assets){const a=S.assets[k];n+=a.held*a.price;n-=(a.short||0)*a.price;}
   return n+companyValue();
 }
@@ -485,6 +513,33 @@ function endOfDay(){
   });
   // جريدة الأسبوع
   if(S.day%7===0)weeklyPaper();
+  // عقارات: أسعار + إيجارات
+  const reSent=avgSectorSent('عقارات');
+  for(const n in S.propPrice){
+    S.propPrice[n]=Math.max(5000,S.propPrice[n]*(1+reSent*0.02+gauss()*0.008));
+  }
+  let rent=0;
+  for(const n in S.props){if(S.props[n].qty>0)rent+=S.props[n].qty*S.propPrice[n]*0.0004;}
+  if(rent>0){S.cash+=rent;S.rentTotal+=rent;}
+  // سندات
+  S.bonds.slice().forEach(b=>{
+    if(S.day>=b.due){S.cash+=b.amt*1.04;S.bonds.splice(S.bonds.indexOf(b),1);
+      toast('💵 سند مستحق: +'+fmtD(b.amt*1.04));log('استحقاق سند '+fmtD(b.amt));}
+  });
+  // هدف اليوم
+  if(!S.goal)rollGoal();
+  else if(netWorth()>=S.goal.target){
+    const bonus=Math.round((S.goal.target-S.goal.start)*0.4);
+    S.cash+=bonus;toast('🎯 حققت هدف اليوم! مكافأة '+fmtD(bonus));
+    log('هدف اليوم: +'+fmtD(bonus));beep(1200,.15);
+    rollGoal();
+  }
+  // المنافس
+  if(S.rival&&S.company){
+    S.rival.strength=Math.max(0.3,Math.min(2,S.rival.strength+gauss()*0.03+avgSectorSent(S.company.sector)*0.02));
+    if(Math.random()<0.06){S.rival.strength=Math.min(2,S.rival.strength+0.12);
+      pushNews(S,'منافسك "'+S.rival.name+'" يطلق منتجًا جديدًا',-0.02,true);refreshNewsUI();}
+  }
   // تشغيل الشركة
   if(S.company)runCompany();
   // NPCs
@@ -515,7 +570,9 @@ function runCompany(){
   const priceFactor=Math.max(0.05,1-(c.price-fairPrice)/fairPrice*0.8);
   const marketing=Math.log(1+c.marketing/100)*(1+0.4*c.up.brand);
   const capacity=1+0.5*c.up.line;
-  const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rnd(0.85,1.15));
+  // المنافس يضغط على الطلب
+  const rivalF=S.rival?Math.max(0.5,1-S.rival.strength*0.16):1;
+  const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rivalF*rnd(0.85,1.15));
   const sold=Math.min(demand,c.workers*10*capacity);
   const revenue=sold*c.price;
   const wageBill=c.workers*22;
@@ -607,6 +664,20 @@ function cover(){
 }
 function log(t){S.tx.unshift({d:S.day,t});if(S.tx.length>80)S.tx.pop();}
 /* جريدة الأسبوع */
+function rollGoal(){
+  const start=netWorth();
+  const target=start*(1.015+Math.random()*0.03)+rnd(500,2000);
+  S.goal={start,target};
+}
+function renderGoal(){
+  const el=$('goalBar');if(!el)return;
+  if(!S.goal){el.innerHTML='';return;}
+  const nw=netWorth();
+  const p=Math.max(0,Math.min(1,(nw-S.goal.start)/(S.goal.target-S.goal.start)));
+  el.innerHTML='<span style="font-size:11.5px;color:var(--dim)">🎯 هدف اليوم: '+fmtD(S.goal.target)+'</span>'+
+    '<div style="flex:1;height:8px;background:#1a2340;border-radius:6px;min-width:80px"><div style="width:'+(p*100).toFixed(0)+'%;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--accent),var(--up))"></div></div>'+
+    '<span style="font-size:11.5px;color:'+(p>=1?'var(--up)':'var(--dim)')+'">'+(p*100).toFixed(0)+'%</span>';
+}
 function weeklyPaper(){
   let best=null,worst=null;
   for(const k in S.assets){const a=S.assets[k];if(a.kind!=='stock')continue;
@@ -859,7 +930,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();}
 
 /* تبويبات */
 function showPage(p){
@@ -900,7 +971,8 @@ $('btnFound').onclick=()=>{
   if(S.cash<50000)return toast('❌ تحتاج ٥٠٬٠٠٠ دينار');
   const name=$('coName').value.trim()||'شركتي';
   S.cash-=50000;
-  S.company={name,sector:$('coSector').value,cash:50000,price:40,rd:200,marketing:300,workers:20,quality:10,track:[],lastYearProfit:0,todayRev:0,todayProfit:0,todaySold:0};
+  S.company={name,sector:$('coSector').value,cash:50000,price:40,rd:200,marketing:300,workers:20,quality:10,track:[],lastYearProfit:0,todayRev:0,todayProfit:0,todaySold:0,up:{line:0,auto:0,brand:0}};
+  S.rival={name:RIVAL_NAMES[Math.floor(Math.random()*RIVAL_NAMES.length)],strength:rnd(0.8,1.2)};
   toast('🎉 أسّست "'+name+'"! أدِرها بحكمة');
   pushNews(S,'تأسيس شركة "'+name+'" في قطاع '+S.company.sector,0,false,true);
   log('تأسيس شركة '+name);save();renderAll();
@@ -913,6 +985,74 @@ $('btnFound').onclick=()=>{
 $('btnInvest').onclick=()=>{if(!S.company||S.cash<10000)return toast('❌ كاش غير كافٍ');S.cash-=10000;S.company.cash+=10000;log('ضخ رأس مال');save();renderAll();};
 $('btnWithdraw').onclick=()=>{if(!S.company||S.company.cash<10000)return toast('❌ خزينة الشركة أقل');S.company.cash-=10000;S.cash+=10000;log('سحب من الشركة');save();renderAll();};
 
+/* عقارات وسندات */
+function renderProps(){
+  const tb=$('propTbl').tBodies[0];tb.innerHTML='';
+  Object.keys(S.propPrice).forEach(n=>{
+    const p=S.propPrice[n];const own=S.props[n]?S.props[n].qty:0;
+    const ch=(p/S.propBase[n]-1)*100;
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td><b>'+n+'</b></td><td>'+fmtD(p)+' <span class="chg '+(ch>=0?'up':'dn')+'" style="font-size:11px">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</span></td>'+
+      '<td>'+own+'</td><td>'+fmtD(p*0.0004)+'</td>'+
+      '<td><button class="btnGhost" data-b="'+n+'">شراء</button> '+(own?'<button class="btnGhost" data-s="'+n+'">بيع</button>':'')+'</td>';
+    tb.appendChild(tr);
+  });
+  tb.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    if(b.dataset.b){
+      const n=b.dataset.b;const p=S.propPrice[n];
+      if(p>S.cash)return toast('❌ كاش غير كافٍ');
+      S.cash-=p;
+      if(!S.props[n])S.props[n]={qty:0,avg:0};
+      const t=S.props[n];t.avg=(t.avg*t.qty+p)/(t.qty+1);t.qty++;
+      toast('🏢 اشتريت: '+n);log('شراء عقار: '+n);
+    }else{
+      const n=b.dataset.s;const t=S.props[n];if(!t||!t.qty)return;
+      t.qty--;S.cash+=S.propPrice[n];
+      toast('💰 بعت: '+n);log('بيع عقار: '+n);
+    }
+    save();checkAchv();renderAll();
+  });
+  $('rentTot').textContent=fmtD(S.rentTotal);
+}
+$('btnBond').onclick=()=>{
+  const v=+$('bondAmt').value||0;
+  if(v<1000)return toast('❌ الحد الأدنى ١٬٠٠٠');
+  if(v>S.cash)return toast('❌ كاش غير كافٍ');
+  S.cash-=v;S.bonds.push({amt:v,due:S.day+30});
+  toast('💵 اشتريت سندًا — يستحق يوم '+(S.day+30));
+  log('شراء سند '+fmtD(v));save();renderAll();
+};
+function renderBonds(){
+  $('bondList').innerHTML=S.bonds.length?S.bonds.map(b=>'<span class="badge" style="margin:2px">'+fmtD(b.amt)+' ← يستحق يوم '+b.due+'</span>').join(' '):'<span style="color:var(--dim);font-size:12.5px">لا سندات مملوكة.</span>';
+}
+/* المنافس */
+const RIVAL_NAMES=['عملاق الصناعة','نجمة القطاع','التيتان','الصقر','المستقبل القريب'];
+function renderRival(){
+  const card=$('rivalCard');
+  if(!S.company||!S.rival){card.classList.add('hidden');return;}
+  card.classList.remove('hidden');
+  const r=S.rival;
+  const threat=r.strength>1.3?'خطير 🔴':r.strength>0.9?'قوي 🟠':'ضعيف 🟢';
+  $('rivalInfo').innerHTML='<div style="font-size:14px;margin-bottom:6px"><b>'+r.name+'</b> — قوة السوق: '+r.strength.toFixed(2)+' ('+threat+')</div>'+
+    '<div style="height:8px;background:#1a2340;border-radius:6px;max-width:300px"><div style="width:'+Math.min(100,r.strength/2*100).toFixed(0)+'%;height:100%;border-radius:6px;background:var(--down)"></div></div>'+
+    '<div style="font-size:12px;color:var(--dim);margin-top:6px">كل ما زادت قوته قلّ الطلب على منتجك. الحملات المضادة تُضعفه.</div>';
+}
+$('btnAttack').onclick=()=>{
+  const c=S.company;if(!c||!S.rival)return;
+  if(c.cash<8000)return toast('❌ خزينة الشركة تحتاج ٨٬٠٠٠');
+  c.cash-=8000;
+  S.rival.strength=Math.max(0.3,S.rival.strength-rnd(0.1,0.28));
+  if(Math.random()<0.22){
+    pushNews(S,'حملة '+c.name+' ضد '+S.rival.name+' ترتد سلبًا!',-0.01,true);
+    c.quality=Math.max(0,c.quality-2);
+    toast('😬 الحملة ارتدت عليك قليلًا');
+  }else{
+    pushNews(S,c.name+' تشن حملة ناجحة ضد '+S.rival.name,0.01,false,true);
+    toast('📣 الحملة نجحت! المنافس أضعف الآن');
+  }
+  refreshNewsUI();log('حملة ضد المنافس');save();renderAll();
+};
+/* عقارات نهاية */
 /* أوامر محددة وتنبيهات */
 function renderPend(){
   const items=[];
@@ -1052,8 +1192,20 @@ $('modalBg').onclick=e=>{if(e.target.id==='modalBg')hideModal();};
 
 /* بدء */
 if(!load())S=freshState();
+migrate();
 renderAll();refreshNewsUI();
+if(!S.tut){
+  showModal('<h2>👋 أهلًا بك في "اقتصاد حي"</h2>'+
+    '<div style="font-size:14px;line-height:1.9">🌍 عالم كامل يتحرك: أسهم وعملات وسلع وعقارات تتأثر بالأخبار لحظة بلحظة.<br>'+
+    '📈 ابدأ بالتداول من صفحة <b>السوق</b> — شراء وبيع وشورت وأوامر محددة.<br>'+
+    '🏭 أسّس <b>شركتك</b> وأدرها: سعر وجودة وتسويق وعمال، ونافس شركة أخرى، واطرحها للاكتتاب.<br>'+
+    '🏦 استخدم <b>البنك</b>: ودائع وقروض وسندات وعقارات بإيجار يومي.<br>'+
+    '🎯 لك <b>هدف يومي</b> بمكافأة، وإنجازات تفتح مع تقدمك.<br>'+
+    '⏩ تحكم في سرعة الزمن من الأعلى. اللعبة تُحفظ تلقائيًا.</div>'+
+    '<button class="bigBtn" style="width:100%;margin-top:14px" onclick="hideModal();S.tut=1;save()">يلا نبدأ 🚀</button>');
+}
 setSpeed(1);
+if(/^#p-/.test(location.hash)){hideModal();S.tut=1;showPage(location.hash.slice(3));renderAll();}
 setInterval(()=>{renderAll();refreshNewsUI();},3000);
 window.addEventListener('resize',()=>renderAsset());
 
@@ -1125,6 +1277,27 @@ if(location.hash==='#test'){
     // جريدة الأسبوع
     S.day=14;weeklyPaper();ok('جريدة الأسبوع',$('modalBg').classList.contains('on'));hideModal();
     renderDonut();renderStats();ok('دونات وإحصائيات',$('statKpis').textContent.length>5);
+    // عقارات
+    S.cash+=600000;
+    renderProps();
+    $('propTbl').querySelector('[data-b]').click();
+    ok('شراء عقار',Object.values(S.props).some(p=>p.qty>0));
+    const rent0=S.rentTotal;endOfDay();
+    ok('إيجار يومي',S.rentTotal>rent0);
+    const pr0=Object.values(S.props)[0].qty;
+    const sb=$('propTbl').querySelector('[data-s]');if(sb)sb.click();
+    ok('بيع عقار',Object.values(S.props).every(p=>p.qty<pr0+1));
+    // سندات
+    $('bondAmt').value=10000;$('btnBond').click();
+    ok('شراء سند',S.bonds.length===1);
+    S.day=S.bonds[0].due;const cb=S.cash;endOfDay();
+    ok('استحقاق سند',S.bonds.length===0);
+    // هدف اليوم
+    ok('هدف اليوم موجود',!!S.goal&&S.goal.target>0);
+    // منافس
+    ok('منافس موجود',!!S.rival);
+    if(S.company){S.company.cash+=20000;const rs=S.rival.strength;$('btnAttack').click();
+      ok('حملة ضد المنافس',S.rival.strength!==rs);}
     save();ok('حفظ',!!localStorage.getItem('econLive1'));
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
   }catch(e){out.push('ERROR '+(e&&e.message));}
