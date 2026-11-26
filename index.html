@@ -344,6 +344,10 @@ tr.row:hover,tr.row.sel{background:#182442}
       <h3 style="margin-top:14px">ترقيات الشركة</h3>
       <div class="tradeRow" id="upgRow"></div>
     </div>
+    <div class="card" id="confCard">
+      <h3>🎤 مؤتمر صحفي (للشركات المدرجة)</h3>
+      <div id="confBody"></div>
+    </div>
     <div class="card" id="rivalCard">
       <h3>⚔️ منافسك في السوق</h3>
       <div id="rivalInfo"></div>
@@ -372,6 +376,10 @@ tr.row:hover,tr.row.sel{background:#182442}
     <div class="tblwrap"><table id="propTbl"><thead><tr><th>العقار</th><th>السعر</th><th>تملك</th><th>إيجار/يوم</th><th></th></tr></thead><tbody></tbody></table></div>
     <div style="font-size:12px;color:var(--dim);margin-top:6px">إجمالي الإيجارات المُحصلة: <b id="rentTot">0</b></div>
   </div>
+  <div class="card"><h3>🏦 صناديق مُدارة (تدفّع رسوم إدارة وتنامى بلا مجهود)</h3>
+    <div class="tblwrap"><table id="fundTbl"><thead><tr><th>الصندوق</th><th>سعر الوحدة</th><th>آخر يوم</th><th>وحداتك</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="tradeRow"><span style="font-size:12.5px;color:var(--dim)">عدد الوحدات:</span><input id="fundQty" type="number" value="10" min="1"></div>
+  </div>
   <div class="card"><h3>💵 السندات الحكومية (عائد ثابت ٤٪ كل ٣٠ يومًا)</h3>
     <div class="tradeRow">
       <input id="bondAmt" type="number" value="10000" min="1000">
@@ -390,6 +398,7 @@ tr.row:hover,tr.row.sel{background:#182442}
 </div>
 
 <div class="page" id="p-news">
+  <div class="card"><h3>📰 ملخص يومك المالي</h3><div id="dailyRecap"></div></div>
   <div class="card">
     <h3>السوق السوداء للمعلومات 🕵️</h3>
     <p style="font-size:13px;color:var(--dim);margin-bottom:8px">اشترِ معلومة مسرّبة عن الحدث القادم قبل وقوعه واستغلها في التداول.</p>
@@ -489,6 +498,7 @@ const NEWS_T=[
 
 /* الحالة */
 let S=null;
+const FUNDS=[['صندوق الحذر 🛡️',0.006,0.008],['صندوق التوازن ⚖️',0.016,0.012],['صندوق المغامر 🚀',0.04,0.018]];
 function freshState(){
   const st={day:1,hour:8,cash:100000,dep:0,loan:0,rate:0.04,infl:0.03,mood:0.15,
     assets:{},news:[],tx:[],nwHist:[100000],company:null,miles:{},repQ:0,
@@ -508,7 +518,7 @@ function freshState(){
   st.theme='dark';st.bubbles={};st.offers=0;st.quests=[];st.questDay=0;st.bankruptcies=0;
   st.lotto={pool:20000,tickets:0};st.moodHist=[0.15];st.sortKey=null;
   st.notifs=[];st.splits=0;
-  st.prestige=0;st.gEvent=null;st.cityStatus={};st.challenge=null;st.options=[];st.autopilot=false;st.subsidiary=null;st.weekly=null;st.hof=[];st.mining={rigs:0,upg:0,total:0};st.auction=null;st.empire=[];st.ins={until:0,paid:0};st.followers=0;st.quiz={day:0,streak:0,won:0};st.duel=null;st.duelWins=0;
+  st.prestige=0;st.gEvent=null;st.cityStatus={};st.challenge=null;st.options=[];st.autopilot=false;st.subsidiary=null;st.weekly=null;st.hof=[];st.mining={rigs:0,upg:0,total:0};st.auction=null;st.empire=[];st.ins={until:0,paid:0};st.followers=0;st.quiz={day:0,streak:0,won:0};st.duel=null;st.duelWins=0;st.fundP=[100,100,100];st.fundHist=[[100],[100],[100]];st.fundH=[0,0,0];st.fundAvg=[0,0,0];st.confDay=-20;
   pushNews(st,'افتتاح السوق العالمية للمحاكاة — حظ موفق أيها المستثمر!',0,false);
   return st;
 }
@@ -549,6 +559,8 @@ function migrate(){
   if(!S.ins)S.ins={until:0,paid:0};
   if(S.followers==null)S.followers=0;
   if(!S.quiz)S.quiz={day:0,streak:0,won:0};if(S.duel===undefined)S.duel=null;if(S.duelWins==null)S.duelWins=0;
+  if(!S.fundP)S.fundP=[100,100,100];if(!S.fundHist)S.fundHist=[[100],[100],[100]];if(!S.fundH)S.fundH=[0,0,0];if(!S.fundAvg)S.fundAvg=[0,0,0];
+  if(S.confDay==null)S.confDay=-20;
 }
 function pushNews(st,text,impact,hot,good){
   st.news.unshift({d:st.day,h:st.hour,text,hot:!!hot,good:!!good});
@@ -568,6 +580,7 @@ function netWorth(){
   let n=S.cash+S.dep-S.loan+propsValue();
   for(const k in S.bonds)n+=S.bonds[k].amt*1.04;
   for(const k in S.assets){const a=S.assets[k];n+=a.held*a.price;n-=(a.short||0)*a.price;}
+  if(S.fundH)for(let i=0;i<3;i++)n+=S.fundH[i]*(S.fundP?S.fundP[i]:100);
   return n+companyValue();
 }
 function shortValue(){let v=0;for(const k in S.assets){const a=S.assets[k];v+=(a.short||0)*a.price;}return v;}
@@ -847,6 +860,13 @@ function endOfDay(){
   if(S.company)runCompany();
   // NPCs
   S.npcs.forEach(n=>{n.prev=n.worth;n.worth*=1+S.mood*0.01+gauss()*0.012;});
+  // صناديق مُدارة
+  FUNDS.forEach((f,i)=>{
+    const ret=S.mood*0.02+gauss()*f[1]-f[2]/365;
+    S.fundP[i]=Math.max(10,S.fundP[i]*(1+ret));
+    S.fundHist[i].push(S.fundP[i]);
+    if(S.fundHist[i].length>400)S.fundHist[i].shift();
+  });
   // ضريبة الأرباح كل ٣٠ يوم
   if(S.day%30===0&&S.nwHist.length>20){
     const ref=S.nwHist[Math.max(0,S.nwHist.length-30)];
@@ -1526,7 +1546,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();}
 
 /* تبويبات */
 function showPage(p){
@@ -1871,6 +1891,60 @@ function duelDay(){
     log('نهاية المبارزة');S.duel=null;
   }
 }
+function renderFunds(){
+  const tb=$('fundTbl');if(!tb)return;const b=tb.tBodies[0];b.innerHTML='';
+  FUNDS.forEach((f,i)=>{
+    const h=S.fundHist[i];const ch=h.length>1?(S.fundP[i]/h[h.length-2]-1)*100:0;
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td><b>'+f[0]+'</b><br><span style="font-size:11px;color:var(--dim)">رسوم '+(f[2]*100).toFixed(1)+'% سنويًا</span></td><td>'+fmtD(S.fundP[i])+'</td><td class="chg '+(ch>=0?'up':'dn')+'">'+(ch>=0?'+':'')+ch.toFixed(1)+'%</td><td>'+S.fundH[i]+'</td><td style="white-space:nowrap"><button class="btnBuy" data-fb="'+i+'" style="padding:5px 10px;font-size:12px">شراء</button> <button class="btnSell" data-fs="'+i+'" style="padding:5px 10px;font-size:12px">بيع</button></td>';
+    b.appendChild(tr);
+  });
+  b.querySelectorAll('[data-fb]').forEach(btn=>btn.onclick=()=>{
+    const i=+btn.dataset.fb;const q=Math.max(1,Math.floor(+$('fundQty').value||1));
+    const cost=q*S.fundP[i];if(cost>S.cash)return toast('❌ كاش غير كافٍ');
+    S.cash-=cost;S.fundAvg[i]=(S.fundAvg[i]*S.fundH[i]+cost)/(S.fundH[i]+q);S.fundH[i]+=q;
+    log('شراء '+q+' وحدة '+FUNDS[i][0]);save();renderAll();
+  });
+  b.querySelectorAll('[data-fs]').forEach(btn=>btn.onclick=()=>{
+    const i=+btn.dataset.fs;const q=Math.min(S.fundH[i],Math.max(1,Math.floor(+$('fundQty').value||1)));
+    if(!q)return toast('❌ لا وحدات لديك');
+    S.fundH[i]-=q;S.cash+=q*S.fundP[i]*(1-0.001);
+    log('بيع '+q+' وحدة '+FUNDS[i][0]);save();renderAll();
+  });
+}
+function renderDailyRecap(){
+  const el=$('dailyRecap');if(!el)return;
+  let ch=0;
+  if(S.nwHist.length>1){const a=S.nwHist[S.nwHist.length-2],b=S.nwHist[S.nwHist.length-1];ch=a>0?(b/a-1)*100:0;}
+  let best=null,worst=null;
+  Object.keys(S.assets).forEach(k=>{const x=S.assets[k];if(x.hist.length<2)return;
+    const c=x.price/x.hist[x.hist.length-2]-1;
+    if(!best||c>best.c)best={n:x.name,c};if(!worst||c<worst.c)worst={n:x.name,c};});
+  el.innerHTML='<div class="kpis">'+
+  kpi('تغير ثروتك أمس',(ch>=0?'+':'')+ch.toFixed(2)+'%')+
+  (best?kpi('نجم الأمس 🚀',best.n+' '+(best.c>=0?'+':'')+(best.c*100).toFixed(1)+'%'):'')+
+  (worst?kpi('خاسر الأمس 🔻',worst.n+' '+(worst.c*100).toFixed(1)+'%'):'')+
+  kpi('أخبار اليوم',S.news.filter(n=>n.d===S.day).length)+'</div>';
+}
+function renderConf(){
+  const el=$('confBody');if(!el)return;
+  const c=S.company;
+  if(!c||!c.public||!c.ticker||!S.assets[c.ticker]){el.innerHTML='<div style="font-size:12.5px;color:var(--dim)">اطرح شركتك للاكتتاب العام أولًا، ثم وجّه رسائل للسوق من هنا كل ١٠ أيام.</div>';return;}
+  const cd=10-(S.day-S.confDay);
+  if(cd>0){el.innerHTML='<div style="font-size:12.5px;color:var(--dim)">المؤتمر القادم بعد '+cd+' يوم. آخر مؤتمر حرّك سهمك.</div>';return;}
+  el.innerHTML='<div style="font-size:12.5px;color:var(--dim);margin-bottom:6px">وجّه رسالة للمستثمرين — كل نبرة تأثير مختلف على سهمك ('+c.ticker+'):</div>'+
+  '<div class="tradeRow">'+
+  '<button class="btnGhost confBtn" data-m="opt">😃 تفاؤل بنتائج قوية قادمة</button>'+
+  '<button class="btnGhost confBtn" data-m="real">🧐 واقعية وشفافية</button>'+
+  '<button class="btnGhost confBtn" data-m="shock">🔥 تصريح صادم مفاجئ</button></div>';
+  el.querySelectorAll('.confBtn').forEach(b=>b.onclick=()=>{
+    const a=S.assets[c.ticker];const m=b.dataset.m;
+    if(m==='opt'){a.sent+=0.06;pushNews(S,'🎤 مدير "'+c.name+'" يَعِد بنتائج قوية — المستثمرون متفائلون',0.02,true,true);}
+    else if(m==='real'){a.sent+=0.02;c.quality=Math.min(100,c.quality+2);pushNews(S,'🎤 "'+c.name+'" تكشف أرقامها بشفافية — ثقة هادئة في السوق',0.01,false,true);}
+    else{a.sent+=(RNG()<0.5?-1:1)*(0.08+RNG()*0.05);pushNews(S,'🎤 تصريح صادم من مدير "'+c.name+'" يشعل الجدل في السوق!',0,true,true);}
+    S.confDay=S.day;toast('🎤 انتهى المؤتمر — راقب سهمك');log('مؤتمر صحفي ('+m+')');save();renderAll();
+  });
+}
 function renderGEvent(){
   const cd=$('gEventCard');if(!cd)return;
   if(S.gEvent){cd.style.display='block';
@@ -1940,10 +2014,19 @@ function renderProps(){
     const tr=document.createElement('tr');
     tr.innerHTML='<td><b>'+n+'</b></td><td>'+fmtD(p)+' <span class="chg '+(ch>=0?'up':'dn')+'" style="font-size:11px">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</span></td>'+
       '<td>'+own+'</td><td>'+fmtD(p*0.0004)+'</td>'+
-      '<td><button class="btnGhost" data-b="'+n+'">شراء</button> '+(own?'<button class="btnGhost" data-s="'+n+'">بيع</button>':'')+'</td>';
+      '<td><button class="btnGhost" data-b="'+n+'">شراء</button> <button class="btnGhost" data-m="'+n+'" title="ادفع ٢٠٪ مقدمًا والباقي قرض">رهن 🏠</button> '+(own?'<button class="btnGhost" data-s="'+n+'">بيع</button>':'')+'</td>';
     tb.appendChild(tr);
   });
   tb.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    if(b.dataset.m){
+      const n=b.dataset.m;const p=S.propPrice[n];const down=Math.round(p*0.2);
+      if(down>S.cash)return toast('❌ تحتاج ٢٠٪ مقدمًا ('+fmtD(down)+')');
+      S.cash-=down;S.loan+=p-down;
+      if(!S.props[n])S.props[n]={qty:0,avg:0};
+      const t=S.props[n];t.avg=(t.avg*t.qty+p)/(t.qty+1);t.qty++;
+      toast('🏠 رهن عقاري: '+n+' — مقدم '+fmtD(down)+' وقرض '+fmtD(p-down));log('رهن عقاري: '+n);
+      save();checkAchv();renderAll();return;
+    }
     if(b.dataset.b){
       const n=b.dataset.b;const p=S.propPrice[n];
       if(p>S.cash)return toast('❌ كاش غير كافٍ');
@@ -2508,6 +2591,27 @@ if(location.hash==='#test'){
     ok('بدء مبارزة',!!S.duel&&S.cash===cd-10000);
     S.duel.bot=0.5;S.day+=5;endOfDay();
     ok('فوز بالمبارزة',S.duel===null&&S.duelWins===1);
+    // الصناديق المُدارة وملخص اليوم
+    renderFunds();
+    const nw0=netWorth();
+    $('fundQty').value=10;
+    document.querySelector('[data-fb="0"]').click();
+    ok('شراء وحدات صندوق',S.fundH[0]===10&&Math.abs(netWorth()-nw0)<1);
+    document.querySelector('[data-fs="0"]').click();
+    ok('بيع وحدات صندوق',S.fundH[0]===0);
+    renderDailyRecap();ok('ملخص اليوم المالي',$('dailyRecap').innerHTML.includes('تغير ثروتك'));
+    // الرهن العقاري والمؤتمر الصحفي
+    renderProps();
+    const pn=Object.keys(S.propPrice)[0];
+    const csh=S.cash,ln=S.loan;
+    document.querySelector('[data-m="'+pn+'"]').click();
+    ok('رهن عقاري',S.props[pn].qty===1&&S.loan>ln&&S.cash===csh-Math.round(S.propPrice[pn]*0.2));
+    S.company={name:'كو التجريبية',sector:'تقنية',cash:50000,price:40,rd:0,marketing:0,workers:10,quality:50,track:[],lastYearProfit:0,todayRev:0,todayProfit:0,todaySold:0,up:{line:0,auto:0,brand:0},public:true,ticker:'س:كو التجريبية'};
+    S.assets['س:كو التجريبية']={kind:'stock',name:'كو التجريبية',sector:'تقنية',price:50,base:50,vol:0.04,sent:0,trend:0,hist:[50],held:0,avg:0,short:0,shortAvg:0,div:0.005};
+    S.confDay=-20;renderConf();
+    const sent0=S.assets['س:كو التجريبية'].sent;
+    document.querySelector('.confBtn[data-m="opt"]').click();
+    ok('مؤتمر صحفي يحرك السهم',S.assets['س:كو التجريبية'].sent>sent0&&S.confDay===S.day);
     save();ok('حفظ',!!localStorage.getItem('econLive1'));
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
   }catch(e){out.push('ERROR '+(e&&e.message));}
