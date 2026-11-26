@@ -190,6 +190,10 @@ tr.row:hover,tr.row.sel{background:#182442}
     <div id="pendList" style="margin-top:6px"></div>
   </div>
   <div class="card">
+    <h3>📊 المتحركون اليوم</h3>
+    <div id="movers"></div>
+  </div>
+  <div class="card">
     <h3>🌡️ مزاج السوق عبر الزمن</h3>
     <canvas id="moodChart" style="width:100%;height:60px;display:block"></canvas>
   </div>
@@ -316,6 +320,7 @@ tr.row:hover,tr.row.sel{background:#182442}
     <div id="tipOut" style="margin-top:8px;font-size:14px"></div>
   </div>
   <div class="card"><h3>آخر الأحداث</h3><div id="newsFeed"></div></div>
+  <div class="card"><h3>🔔 سجل الإشعارات</h3><div id="notifList" style="max-height:300px;overflow-y:auto"></div></div>
 </div>
 
 <div class="page" id="p-ranks">
@@ -402,6 +407,7 @@ function freshState(){
   st.propBase=Object.assign({},st.propPrice);st.bonds=[];st.goal=null;st.rival=null;st.tut=0;st.rentTotal=0;
   st.theme='dark';st.bubbles={};st.offers=0;st.quests=[];st.questDay=0;st.bankruptcies=0;
   st.lotto={pool:20000,tickets:0};st.moodHist=[0.15];st.sortKey=null;
+  st.notifs=[];st.splits=0;
   pushNews(st,'افتتاح السوق العالمية للمحاكاة — حظ موفق أيها المستثمر!',0,false);
   return st;
 }
@@ -424,6 +430,7 @@ function migrate(){
   if(!S.quests)S.quests=[];if(!S.questDay)S.questDay=0;if(!S.bankruptcies)S.bankruptcies=0;
   if(!S.lotto)S.lotto={pool:20000,tickets:0};if(!S.moodHist)S.moodHist=[S.mood||0];
   if(S.sortKey===undefined)S.sortKey=null;
+  if(!S.notifs)S.notifs=[];if(!S.splits)S.splits=0;
 }
 function pushNews(st,text,impact,hot,good){
   st.news.unshift({d:st.day,h:st.hour,text,hot:!!hot,good:!!good});
@@ -490,6 +497,16 @@ function endOfDay(){
   // فوائد
   S.dep*=1+S.rate/365;
   S.loan*=1+0.09/365;
+  // تقسيم أسهم تلقائي 1:2 فوق 400 د.
+  Object.keys(S.assets).forEach(k=>{const a=S.assets[k];
+    if(a.kind==='stock'&&a.price>400){
+      a.price/=2;a.hist=a.hist.map(v=>v/2);
+      if(a.held){a.held*=2;a.avg/=2;}
+      if(a.short){a.short*=2;a.shortAvg=(a.shortAvg||a.price)/2;}
+      S.splits++;
+      pushNews(S,'✂️ تقسيم سهم '+a.name+' (1 لـ 2) بعد تجاوزه 400 د.',0,true,true);
+      toast('✂️ تقسيم سهم '+a.name+': أسهمك اتضاعفت');
+    }});
   // توزيعات أرباح الأسهم
   let divSum=0;
   for(const k in S.assets){const a=S.assets[k];
@@ -1131,7 +1148,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();}
 
 /* تبويبات */
 function showPage(p){
@@ -1199,6 +1216,17 @@ $('btnLotto').onclick=()=>{
 function renderLotto(){
   $('lottoPool').textContent=fmtD(S.lotto.pool);
   $('lottoT').textContent=S.lotto.tickets;
+}
+function renderNotifs(){
+  const el=$('notifList');if(!el)return;
+  el.innerHTML=S.notifs.slice().reverse().map(n=>'<div class="newsItem" style="font-size:13px">'+n.msg+'<div class="nt">اليوم '+n.d+' — '+String(n.hh).padStart(2,'0')+':'+String(n.mm).padStart(2,'0')+'</div></div>').join('')||'<div style="color:var(--dim)">لا إشعارات بعد</div>';
+}
+function renderMovers(){
+  const el=$('movers');if(!el)return;
+  const stocks=Object.keys(S.assets).filter(k=>S.assets[k].kind==='stock');
+  const byChg=stocks.slice().sort((x,y)=>chgPct(S.assets[y])-chgPct(S.assets[x]));
+  const fmt1=k=>{const a=S.assets[k],c=chgPct(a);return '<div style="display:flex;justify-content:space-between;font-size:13px;margin:2px 0"><span>'+a.name+'</span><span class="'+(c>=0?'up':'down')+'">'+(c>=0?'+':'')+c.toFixed(1)+'%</span></div>';};
+  el.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div><div style="color:var(--up);font-size:12px;margin-bottom:4px">🚀 الأكثر ارتفاعًا</div>'+byChg.slice(0,3).map(fmt1).join('')+'</div><div><div style="color:var(--dn);font-size:12px;margin-bottom:4px">🔻 الأكثر انخفاضًا</div>'+byChg.slice(-3).reverse().map(fmt1).join('')+'</div></div>';
 }
 function renderMood(){
   const cv=$('moodChart');if(!cv)return;
@@ -1409,7 +1437,11 @@ $('btnTip').onclick=()=>{
   $('tipOut').innerHTML='<div class="newsItem '+(n.g?'good':'hot')+'">🕵️ خلال '+S.nextNews.h+' ساعة تقريبًا: <b>'+n.t+'</b>'+target+'</div>';
   log('شراء معلومة مسرّبة');save();checkAchv();renderHead();
 };
-function toast(t){const d=document.createElement('div');d.className='toast';d.textContent=t;$('toasts').appendChild(d);setTimeout(()=>d.remove(),4200);}
+function toast(t){
+  if(S&&S.notifs){S.notifs.push({d:S.day,hh:S.hh,mm:S.mm,msg:t});if(S.notifs.length>60)S.notifs.shift();}
+  const d=document.createElement('div');d.className='toast';d.textContent=t;$('toasts').appendChild(d);setTimeout(()=>d.remove(),4200);
+  if(document.getElementById('notifList'))renderNotifs();
+}
 function showModal(h){$('modal').innerHTML=h;$('modalBg').classList.add('on');}
 function hideModal(){$('modalBg').classList.remove('on');}
 $('modalBg').onclick=e=>{if(e.target.id==='modalBg')hideModal();};
@@ -1553,9 +1585,8 @@ if(location.hash==='#test'){
     ok('اكتتاب جديد يعوض',Object.keys(S.assets).filter(k=>S.assets[k].kind==='stock').length>=stc0);
     // مهام
     rollQuests();ok('مهام تولدت',S.quests.length===3);
-    const q=S.quests.find(x=>x.k==='cash');
-    if(q){S.cash=q.n+1;const cB=S.cash;checkQuests();ok('إنجاز مهمة بمكافأة',q.done===1);}
-    else{S.cash+=1e6;checkQuests();ok('إنجاز مهمة بمكافأة',S.quests.some(x=>x.done));}
+    let q=null;for(let i=0;i<20&&!q;i++){rollQuests();q=S.quests.find(x=>x.k==='cash');}
+    S.cash=q.n+1;checkQuests();ok('إنجاز مهمة بمكافأة',q.done===1);
     // مستشار
     advisor();ok('مستشار آلي',$('modalBg').classList.contains('on'));hideModal();
     // يانصيب
@@ -1568,6 +1599,14 @@ if(location.hash==='#test'){
     $('thPrice').click();ok('ترتيب بالسعر',S.sortKey==='price');
     // مزاج تاريخي
     ok('مزاج تاريخي',S.moodHist.length>10);
+    // سجل إشعارات + متحركون
+    ok('سجل إشعارات',S.notifs.length>0&&$('notifList').innerHTML.length>10);
+    renderMovers();ok('متحركون اليوم',$('movers').innerHTML.includes('الأكثر'));
+    // تقسيم أسهم
+    const sk2=Object.keys(S.assets).find(k=>S.assets[k].kind==='stock');
+    S.assets[sk2].price=500;S.assets[sk2].held=10;S.assets[sk2].avg=400;
+    const q0=S.assets[sk2].held;endOfDay();
+    ok('تقسيم سهم',S.assets[sk2].held===q0*2&&S.splits>0);
     save();ok('حفظ',!!localStorage.getItem('econLive1'));
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
   }catch(e){out.push('ERROR '+(e&&e.message));}
