@@ -89,6 +89,19 @@ tr.row:hover,tr.row.sel{background:#182442}
 .sliderRow input[type=range]{width:100%;accent-color:var(--accent)}
 .bigBtn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-weight:700;padding:12px 26px;font-size:16px;border-radius:12px}
 
+.btnShort{background:var(--gold);color:#241a02;font-weight:700;padding:10px 18px;font-size:15px}
+.btnCover{background:#a855f7;color:#1f0533;font-weight:700;padding:10px 18px;font-size:15px}
+.chartTgl{display:flex;gap:4px;margin-inline-start:8px}
+.chartTgl button{background:var(--panel2);color:var(--dim);border:1px solid var(--line);padding:4px 10px;font-size:12px}
+.chartTgl button.on{color:#fff;background:var(--accent2);border-color:var(--accent2)}
+.idxGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:8px}
+.idx{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px;cursor:pointer}
+.idx b{font-size:12.5px;display:block}
+.idx span{font-size:11.5px}
+.achv{display:flex;gap:10px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:7px;font-size:13.5px}
+.achv.done{border-color:var(--up)}
+.achv .ic{font-size:20px}
+.achv.dim{opacity:.45}
 /* toasts + modal */
 #toasts{position:fixed;bottom:14px;inset-inline-start:14px;z-index:99;display:flex;flex-direction:column;gap:8px;max-width:86vw}
 .toast{background:#17223c;border:1px solid var(--accent);color:#fff;padding:11px 16px;border-radius:12px;font-size:14px;box-shadow:0 6px 24px #0009;animation:fade .3s}
@@ -137,6 +150,10 @@ tr.row:hover,tr.row.sel{background:#182442}
       <span id="assetPrice">—</span>
       <span id="assetChg" class="chg">—</span>
       <span class="badge" id="assetKind">—</span>
+      <span class="chartTgl">
+        <button id="cLine" class="on">خط</button>
+        <button id="cCandle">شموع</button>
+      </span>
       <span style="margin-inline-start:auto" class="tfBtns">
         <button data-tf="1" >يوم</button>
         <button data-tf="7" class="on">أسبوع</button>
@@ -152,8 +169,22 @@ tr.row:hover,tr.row.sel{background:#182442}
       </span>
       <button class="btnBuy" id="btnBuy">شراء</button>
       <button class="btnSell" id="btnSell">بيع</button>
+      <button class="btnShort" id="btnShort">شورت</button>
+      <button class="btnCover" id="btnCover">تغطية</button>
       <span id="tradeInfo" style="font-size:12px;color:var(--dim)"></span>
     </div>
+    <div class="tradeRow" style="border-top:1px solid #16203a;padding-top:10px">
+      <input id="loPrice" type="number" placeholder="السعر المستهدف" style="width:130px">
+      <button class="btnGhost" id="btnLoBuy">أمر شراء محدد</button>
+      <button class="btnGhost" id="btnLoSell">أمر بيع محدد</button>
+      <button class="btnGhost" id="btnAlert">🔔 تنبيه سعري</button>
+      <button class="btnGhost" id="btnSnd">🔊</button>
+    </div>
+    <div id="pendList" style="margin-top:6px"></div>
+  </div>
+  <div class="card">
+    <h3>مؤشرات القطاعات</h3>
+    <div class="idxGrid" id="idxGrid"></div>
   </div>
   <div class="card">
     <h3>الأسهم</h3>
@@ -179,6 +210,10 @@ tr.row:hover,tr.row.sel{background:#182442}
     <div id="pfEmpty" style="color:var(--dim);font-size:13.5px;padding:8px">لا تملك شيئًا بعد. ابدأ الشراء من صفحة السوق.</div>
   </div>
   <div class="card"><h3>أداء الثروة</h3><canvas id="nwChart" style="width:100%;height:160px;display:block"></canvas></div>
+  <div class="grid2">
+    <div class="card"><h3>توزيع ممتلكاتك</h3><canvas id="donut" style="width:180px;height:180px;display:block;margin:0 auto"></canvas><div id="donutLeg" style="font-size:12px;color:var(--dim);margin-top:8px"></div></div>
+    <div class="card"><h3>إحصائياتك</h3><div class="kpis" id="statKpis"></div></div>
+  </div>
   <div class="card"><h3>سجل العمليات</h3><div id="txLog" style="max-height:220px;overflow-y:auto"></div></div>
 </div>
 
@@ -210,7 +245,10 @@ tr.row:hover,tr.row.sel{background:#182442}
       <div class="tradeRow">
         <button class="btnGhost" id="btnInvest">ضخ ١٠٬٠٠٠ من كاشك</button>
         <button class="btnGhost" id="btnWithdraw">سحب ١٠٬٠٠٠ من الشركة</button>
+        <button class="btnShort hidden" id="btnIPO">📢 اطرح ٣٠٪ للاكتتاب العام</button>
       </div>
+      <h3 style="margin-top:14px">ترقيات الشركة</h3>
+      <div class="tradeRow" id="upgRow"></div>
     </div>
     <div class="card"><h3>التقارير ربع السنوية</h3><div id="coReports"></div></div>
   </div>
@@ -232,12 +270,21 @@ tr.row:hover,tr.row.sel{background:#182442}
   <div class="card"><h3>مؤشرات الاقتصاد الكلي</h3><div class="kpis" id="macroKpis"></div></div>
 </div>
 
-<div class="page" id="p-news"><div class="card"><h3>آخر الأحداث</h3><div id="newsFeed"></div></div></div>
+<div class="page" id="p-news">
+  <div class="card">
+    <h3>السوق السوداء للمعلومات 🕵️</h3>
+    <p style="font-size:13px;color:var(--dim);margin-bottom:8px">اشترِ معلومة مسرّبة عن الحدث القادم قبل وقوعه واستغلها في التداول.</p>
+    <button class="btnShort" id="btnTip">اشترِ معلومة مسرّبة (٥٬٠٠٠ د.)</button>
+    <div id="tipOut" style="margin-top:8px;font-size:14px"></div>
+  </div>
+  <div class="card"><h3>آخر الأحداث</h3><div id="newsFeed"></div></div>
+</div>
 
 <div class="page" id="p-ranks">
   <div class="card"><h3>قائمة أثرياء العالم</h3>
     <div class="tblwrap"><table id="rankTbl"><thead><tr><th>#</th><th>الاسم</th><th>الثروة</th><th>التغير اليومي</th></tr></thead><tbody></tbody></table></div>
   </div>
+  <div class="card"><h3>🏅 الإنجازات</h3><div id="achvList"></div></div>
 </div>
 
 <div id="toasts"></div>
@@ -304,14 +351,28 @@ const NEWS_T=[
 let S=null;
 function freshState(){
   const st={day:1,hour:8,cash:100000,dep:0,loan:0,rate:0.04,infl:0.03,mood:0.15,
-    assets:{},news:[],tx:[],nwHist:[100000],company:null,miles:{},repQ:0};
+    assets:{},news:[],tx:[],nwHist:[100000],company:null,miles:{},repQ:0,
+    nextNews:null,achv:{},sectorHist:{},coveredProfit:0,divCount:0,tips:0,tipUsed:0};
   COMPS.forEach(c=>{st.assets['س:'+c[0]]={kind:'stock',name:c[0],sector:c[1],price:c[2],base:c[2],vol:c[3],
-    sent:0,trend:0,hist:[c[2]],held:0,avg:0,div:0.004+Math.random()*0.01};});
-  FX.forEach(c=>{st.assets['ع:'+c[0]]={kind:'fx',name:c[0],price:c[1],base:c[1],vol:0.008,sent:0,trend:0,hist:[c[1]],held:0,avg:0};});
-  CMD.forEach(c=>{st.assets['م:'+c[0]]={kind:'cmd',name:c[0],price:c[1],base:c[1],vol:0.03,sent:0,trend:0,hist:[c[1]],held:0,avg:0};});
+    sent:0,trend:0,hist:[c[2]],held:0,avg:0,short:0,shortAvg:0,div:0.004+Math.random()*0.01};});
+  FX.forEach(c=>{st.assets['ع:'+c[0]]={kind:'fx',name:c[0],price:c[1],base:c[1],vol:0.008,sent:0,trend:0,hist:[c[1]],held:0,avg:0,short:0,shortAvg:0};});
+  CMD.forEach(c=>{st.assets['م:'+c[0]]={kind:'cmd',name:c[0],price:c[1],base:c[1],vol:0.03,sent:0,trend:0,hist:[c[1]],held:0,avg:0,short:0,shortAvg:0};});
   st.npcs=NPC_NAMES.map(n=>({name:n,worth:rnd(60000,900000),prev:0}));
+  SECTORS.forEach(s=>st.sectorHist[s]=[100]);
+  st.orders=[];st.alerts=[];st.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};st.snd=true;
   pushNews(st,'افتتاح السوق العالمية للمحاكاة — حظ موفق أيها المستثمر!',0,false);
   return st;
+}
+function migrate(){
+  for(const k in S.assets){const a=S.assets[k];if(a.short==null)a.short=0;if(a.shortAvg==null)a.shortAvg=0;}
+  if(!S.nextNews&&S.nextNews!==null)S.nextNews=null;
+  if(!S.achv)S.achv={};if(!S.sectorHist){S.sectorHist={};SECTORS.forEach(s=>S.sectorHist[s]=[100]);}
+  SECTORS.forEach(s=>{if(!S.sectorHist[s])S.sectorHist[s]=[100];});
+  if(S.coveredProfit==null)S.coveredProfit=0;if(S.divCount==null)S.divCount=0;
+  if(S.tips==null)S.tips=0;if(S.tipUsed==null)S.tipUsed=0;
+  if(!S.orders)S.orders=[];if(!S.alerts)S.alerts=[];
+  if(!S.stats)S.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};
+  if(S.snd==null)S.snd=true;
 }
 function pushNews(st,text,impact,hot,good){
   st.news.unshift({d:st.day,h:st.hour,text,hot:!!hot,good:!!good});
@@ -328,9 +389,10 @@ function companyValue(){
 }
 function netWorth(){
   let n=S.cash+S.dep-S.loan;
-  for(const k in S.assets){const a=S.assets[k];n+=a.held*a.price;}
+  for(const k in S.assets){const a=S.assets[k];n+=a.held*a.price;n-=(a.short||0)*a.price;}
   return n+companyValue();
 }
+function shortValue(){let v=0;for(const k in S.assets){const a=S.assets[k];v+=(a.short||0)*a.price;}return v;}
 
 /* تكت كل ساعة */
 let tickCount=0;
@@ -350,8 +412,21 @@ function tick(){
     a.hist.push(a.price);
     if(a.hist.length>2200)a.hist.shift();
   }
-  // أخبار عشوائية
-  if(Math.random()<0.045)fireNews();
+  // أخبار مجدولة (يمكن شراء تسريبة عنها)
+  if(!S.nextNews&&Math.random()<0.05){
+    S.nextNews={i:Math.floor(Math.random()*NEWS_T.length),h:Math.round(rnd(5,26))};
+    S.tipUsed=0;
+  }
+  if(S.nextNews){
+    S.nextNews.h--;
+    if(S.nextNews.h<=0){fireNews(S.nextNews.i);S.nextNews=null;}
+  }
+  // مؤشرات القطاعات
+  SECTORS.forEach(sec=>{
+    let s=0,n=0;
+    for(const k in S.assets){const a=S.assets[k];if(a.kind==='stock'&&a.sector===sec){s+=a.price/a.base;n++;}}
+    if(n){const h=S.sectorHist[sec];h.push(100*s/n);if(h.length>2200)h.shift();}
+  });
   // نهاية اليوم
   if(S.hour>=24){S.hour=0;S.day++;endOfDay();}
 }
@@ -363,7 +438,53 @@ function endOfDay(){
   let divSum=0;
   for(const k in S.assets){const a=S.assets[k];
     if(a.kind==='stock'&&a.held>0&&Math.random()<0.08){const d=a.held*a.price*a.div/90;divSum+=d;}}
-  if(divSum>1){S.cash+=divSum;toast('توزيعات أرباح: +'+fmtD(divSum));}
+  if(divSum>1){S.cash+=divSum;S.divCount++;S.stats.divTotal+=divSum;toast('توزيعات أرباح: +'+fmtD(divSum));beep(660,.08);}
+  // تحركات كبار المستثمرين
+  if(Math.random()<0.22){
+    const npc=S.npcs[Math.floor(Math.random()*S.npcs.length)];
+    const keys=Object.keys(S.assets).filter(k=>S.assets[k].kind==='stock');
+    const a=S.assets[keys[Math.floor(Math.random()*keys.length)]];
+    const dir=Math.random()<0.5?1:-1;
+    a.sent+=dir*0.03;
+    pushNews(S,(dir>0?npc.name+' يشتري حصة كبيرة في ':npc.name+' يتخلص من أسهم ')+a.name,dir*0.03,dir<0,dir>0);
+    refreshNewsUI();
+  }
+  // نداء الهامش
+  if(shortValue()>netWorth()*0.6&&shortValue()>0){
+    for(const k in S.assets){const a=S.assets[k];
+      if(a.short>0){S.cash-=a.short*a.price-fee(a.short*a.price);log('نداء هامش: تغطية إجبارية '+a.short+' × '+a.name);a.short=0;a.shortAvg=0;}}
+    toast('🚨 نداء هامش! غطّينا مراكزك المكشوفة إجباريًا');
+  }
+  checkAchv();
+  // تنفيذ الأوامر المحددة والتنبيهات
+  S.orders.slice().forEach(o=>{
+    const a=S.assets[o.sym];if(!a)return;
+    const hit=o.dir==='buy'?a.price<=o.target:a.price>=o.target;
+    if(hit){
+      S.orders.splice(S.orders.indexOf(o),1);
+      const q=o.q;
+      if(o.dir==='buy'){
+        const cost=q*a.price+fee(q*a.price);
+        if(cost<=S.cash){S.cash-=cost;const tot=a.held*a.avg+q*a.price;a.held+=q;a.avg=tot/a.held;
+          log('أمر محدد: شراء '+q+' × '+a.name+' @ '+a.price.toFixed(2));toast('⚡ نُفذ أمر الشراء: '+a.name);}
+        else toast('⚠️ فشل أمر الشراء (كاش غير كافٍ): '+a.name);
+      }else{
+        if(q<=a.held){S.cash+=q*a.price-fee(q*a.price);a.held-=q;if(!a.held)a.avg=0;
+          log('أمر محدد: بيع '+q+' × '+a.name+' @ '+a.price.toFixed(2));toast('⚡ نُفذ أمر البيع: '+a.name);}
+        else toast('⚠️ فشل أمر البيع (لا تملك): '+a.name);
+      }
+      beep(880,.12);
+    }
+  });
+  S.alerts.slice().forEach(al=>{
+    const a=S.assets[al.sym];if(!a)return;
+    if((al.dir==='up'&&a.price>=al.target)||(al.dir==='down'&&a.price<=al.target)){
+      S.alerts.splice(S.alerts.indexOf(al),1);
+      toast('🔔 تنبيه: '+a.name+' وصل '+a.price.toFixed(2));beep(990,.15);
+    }
+  });
+  // جريدة الأسبوع
+  if(S.day%7===0)weeklyPaper();
   // تشغيل الشركة
   if(S.company)runCompany();
   // NPCs
@@ -375,8 +496,8 @@ function endOfDay(){
   if(S.company&&S.day%30===0)quarterReport();
   save();
 }
-function fireNews(){
-  const n=NEWS_T[Math.floor(Math.random()*NEWS_T.length)];
+function fireNews(idx){
+  const n=NEWS_T[idx==null?Math.floor(Math.random()*NEWS_T.length):idx];
   if(n.k==='sector'){for(const k in S.assets){const a=S.assets[k];if(a.kind==='stock'&&a.sector===n.s)a.sent+=n.m;}}
   else if(n.k==='all'){for(const k in S.assets){const a=S.assets[k];if(a.kind==='stock')a.sent+=n.m;}}
   else if(n.k==='fx'){const a=S.assets['ع:'+n.s];if(a)a.sent+=n.m;}
@@ -388,24 +509,30 @@ function fireNews(){
 /* الشركة */
 function runCompany(){
   const c=S.company;
+  if(!c.up)c.up={line:0,auto:0,brand:0};
   const sectorMood=avgSectorSent(c.sector);
   const fairPrice=40*(1+sectorMood)+c.quality*1.5;
   const priceFactor=Math.max(0.05,1-(c.price-fairPrice)/fairPrice*0.8);
-  const marketing=Math.log(1+c.marketing/100);
-  const demand=Math.max(0,c.workers*8*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rnd(0.85,1.15));
-  const sold=Math.min(demand,c.workers*10);
+  const marketing=Math.log(1+c.marketing/100)*(1+0.4*c.up.brand);
+  const capacity=1+0.5*c.up.line;
+  const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rnd(0.85,1.15));
+  const sold=Math.min(demand,c.workers*10*capacity);
   const revenue=sold*c.price;
   const wageBill=c.workers*22;
   const costs=wageBill+c.rd+c.marketing+sold*c.price*0.35;
   const profit=revenue-costs;
   c.cash+=profit;
   c.todayRev=revenue;c.todayProfit=profit;c.todaySold=Math.round(sold);
-  c.quality=Math.min(100,c.quality+c.rd/4000);
+  c.quality=Math.min(100,c.quality+c.rd/4000+c.up.auto*0.05);
   c.quality=Math.max(0,c.quality-0.05);
   c.track.push(profit);
   if(c.track.length>365)c.track.shift();
   const yr=c.track.slice(-365).reduce((a,b)=>a+b,0);
   c.lastYearProfit=yr;
+  if(c.public&&c.ticker&&S.assets[c.ticker]){
+    const a=S.assets[c.ticker];
+    a.sent+=Math.max(-0.05,Math.min(0.05,profit/60000));
+  }
   if(c.cash<0){ // إفلاس؟
     S.cash+=c.cash;c.cash=0;
     toast('⚠️ شركتك استنزفت خزينتها وسحبت من كاشك!');
@@ -438,19 +565,78 @@ function buy(){
   S.cash-=cost;
   const tot=a.held*a.avg+q*a.price;
   a.held+=q;a.avg=tot/a.held;
-  a.sent+=0.002*q/ (100);
+  a.sent+=Math.min(0.02,q*a.price/2e6);
+  S.stats.trades++;
   log('شراء '+q+' × '+a.name+' @ '+a.price.toFixed(2));
-  save();renderAll();
+  save();checkAchv();renderAll();
 }
 function sell(){
   const a=S.assets[sel];const q=Math.max(0,Math.floor(+$('qty').value||0));if(!q)return;
   if(q>a.held){toast('❌ لا تملك هذه الكمية');return;}
   S.cash+=q*a.price-fee(q*a.price);
   a.held-=q;if(!a.held)a.avg=0;
+  a.sent-=Math.min(0.02,q*a.price/2e6);
+  S.stats.trades++;
+  const pl=(a.price-a.avg)*q;if(pl>S.stats.bestTrade)S.stats.bestTrade=pl;
   log('بيع '+q+' × '+a.name+' @ '+a.price.toFixed(2));
-  save();renderAll();
+  save();checkAchv();renderAll();
+}
+function shortSell(){
+  const a=S.assets[sel];const q=Math.max(0,Math.floor(+$('qty').value||0));if(!q)return;
+  if(shortValue()+q*a.price>Math.max(0,netWorth())*0.5){toast('❌ تجاوزت حد المكشوف المسموح (٥٠٪ من ثروتك)');return;}
+  const proceeds=q*a.price-fee(q*a.price);
+  S.cash+=proceeds;
+  const tot=a.short*a.shortAvg+q*a.price;
+  a.short+=q;a.shortAvg=tot/a.short;
+  a.sent-=Math.min(0.02,q*a.price/2e6);
+  S.stats.trades++;beep(440,.06);
+  log('شورت '+q+' × '+a.name+' @ '+a.price.toFixed(2));
+  save();checkAchv();renderAll();
+}
+function cover(){
+  const a=S.assets[sel];const q=Math.min(Math.max(0,Math.floor(+$('qty').value||0)),a.short);if(!q)return;
+  const cost=q*a.price+fee(q*a.price);
+  if(cost>S.cash){toast('❌ كاش غير كافٍ للتغطية');return;}
+  S.cash-=cost;
+  const pl=(a.shortAvg-a.price)*q;
+  S.coveredProfit+=pl;
+  a.short-=q;if(!a.short)a.shortAvg=0;
+  S.stats.trades++;
+  log('تغطية شورت '+q+' × '+a.name+' @ '+a.price.toFixed(2)+' ('+(pl>=0?'+':'')+fmt(pl)+')');
+  save();checkAchv();renderAll();
 }
 function log(t){S.tx.unshift({d:S.day,t});if(S.tx.length>80)S.tx.pop();}
+/* جريدة الأسبوع */
+function weeklyPaper(){
+  let best=null,worst=null;
+  for(const k in S.assets){const a=S.assets[k];if(a.kind!=='stock')continue;
+    const ch=chgPct(a);
+    if(!best||ch>best.ch)best={n:a.name,ch};
+    if(!worst||ch<worst.ch)worst={n:a.name,ch};
+  }
+  const nw=netWorth();const wk=S.nwHist.length>7?nw/S.nwHist[S.nwHist.length-7]-1:0;
+  const newsTop=S.news.slice(0,3).map(n=>'<div style="font-size:13px;padding:5px 0;border-bottom:1px solid #16203a">• '+n.text+'</div>').join('');
+  showModal('<h2>🗞️ جريدة الأسبوع — اليوم '+S.day+'</h2>'+
+    row('ثروتك',fmtD(nw))+row('تغير الأسبوع',(wk>=0?'+':'')+(wk*100).toFixed(1)+'%')+
+    (best?row('نجم السوق',best.n+' ('+(best.ch>=0?'+':'')+best.ch.toFixed(1)+'%)'):'')+
+    (worst?row('الخاسر الأكبر',worst.n+' ('+worst.ch.toFixed(1)+'%)'):'')+
+    '<h3 style="margin:12px 0 6px;color:var(--dim);font-size:13px">أبرز الأحداث</h3>'+newsTop+
+    '<button class="bigBtn" style="width:100%;margin-top:14px" onclick="hideModal()">تمام</button>');
+}
+/* صوتيات */
+let AC=null;
+function beep(f,d){
+  if(!S||!S.snd)return;
+  try{
+    AC=AC||new (window.AudioContext||window.webkitAudioContext)();
+    const o=AC.createOscillator(),g=AC.createGain();
+    o.frequency.value=f;o.type='sine';
+    g.gain.setValueAtTime(0.07,AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+d);
+    o.connect(g);g.connect(AC.destination);
+    o.start();o.stop(AC.currentTime+d);
+  }catch(e){}
+}
 
 /* ================= الرسم ================= */
 function drawChart(cv,data,up){
@@ -472,8 +658,7 @@ function drawChart(cv,data,up){
   // آخر نقطة
   const lx=W-pad,ly=H-pad-((data[data.length-1]-mn)/rg)*(H-pad*2);
   ctx.fillStyle=col;ctx.beginPath();ctx.arc(lx,ly,6,0,7);ctx.fill();
-  ctx.fillStyle='#8b97b3';ctx.font='22px Tahoma';
-  ctx.fillText(fmt(mx),8,26);ctx.fillText(fmt(mn),8,H-8);
+  pill(ctx,mx,8,6);pill(ctx,mn,8,H-30);
 }
 function spark(cv,data){
   const ctx=cv.getContext('2d');const W=cv.width=160,H=cv.height=44;
@@ -486,6 +671,44 @@ function tfData(hist){
   const perDay=24;
   if(tf===0)return hist.filter((_,i)=>i%2===0);
   return hist.slice(-tf*perDay);
+}
+function toCandles(hist){
+  const perDay=24;
+  let data=hist;
+  if(tf!==0)data=hist.slice(-tf*perDay);
+  const cs=[];
+  for(let i=0;i<data.length;i+=perDay){
+    const ch=data.slice(i,i+perDay);if(!ch.length)break;
+    cs.push({o:ch[0],h:Math.max(...ch),l:Math.min(...ch),c:ch[ch.length-1]});
+  }
+  return cs.length?cs:[{o:data[0]||1,h:data[0]||1,l:data[0]||1,c:data[0]||1}];
+}
+function drawCandles(cv,cs){
+  const ctx=cv.getContext('2d');const W=cv.width=cv.clientWidth*2,H=cv.height=cv.clientHeight*2;
+  ctx.clearRect(0,0,W,H);
+  const mn=Math.min(...cs.map(c=>c.l)),mx=Math.max(...cs.map(c=>c.h)),rg=(mx-mn)||mx*0.01||1;
+  const pad=10;const bw=Math.max(3,(W-pad*2)/cs.length*0.6);
+  ctx.strokeStyle='#1a2340';
+  for(let i=1;i<4;i++){const y=H*i/4;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  cs.forEach((c,i)=>{
+    const x=pad+(i+0.5)/cs.length*(W-pad*2);
+    const y=v=>H-pad-((v-mn)/rg)*(H-pad*2);
+    const up=c.c>=c.o;const col=up?'#22c55e':'#ef4444';
+    ctx.strokeStyle=col;ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(x,y(c.h));ctx.lineTo(x,y(c.l));ctx.stroke();
+    ctx.fillStyle=col;
+    const top=y(Math.max(c.o,c.c)),bot=y(Math.min(c.o,c.c));
+    ctx.fillRect(x-bw/2,top,bw,Math.max(2,bot-top));
+  });
+  pill(ctx,mx,8,6);pill(ctx,mn,8,H-30);
+}
+function pill(ctx,val,x,y){
+  ctx.save();ctx.direction='ltr';ctx.textAlign='left';
+  const t=fmt(val);ctx.font='22px Tahoma';
+  const w=ctx.measureText(t).width;
+  ctx.fillStyle='#0e1422ee';ctx.fillRect(x-4,y-4,w+10,30);
+  ctx.fillStyle='#c9d4ea';ctx.fillText(t,x,y+20);
+  ctx.restore();
 }
 
 /* ================= الواجهة ================= */
@@ -502,7 +725,7 @@ function renderHead(){
 function chgPct(a){const ref=a.hist.length>24?a.hist[a.hist.length-25]:a.base;return (a.price/ref-1)*100;}
 function renderMarket(){
   const tb=$('stockTbl').tBodies[0];tb.innerHTML='';
-  Object.keys(S.assets).filter(k=>S.assets[k].kind==='stock').forEach(k=>{
+  Object.keys(S.assets).filter(k=>S.assets[k].kind==='stock'&&(!secFilter||S.assets[k].sector===secFilter)).forEach(k=>{
     const a=S.assets[k];const ch=chgPct(a);
     const tr=document.createElement('tr');tr.className='row'+(k===sel?' sel':'');
     tr.innerHTML='<td><b>'+a.name+'</b></td><td><span class="badge">'+a.sector+'</span></td>'+
@@ -532,8 +755,12 @@ function renderAsset(){
   e.className='chg '+(ch>=0?'up':'dn');
   $('assetKind').textContent=a.kind==='stock'?'سهم — '+a.sector:a.kind==='fx'?'عملة':'سلعة';
   const d=tfData(a.hist);
-  drawChart($('bigChart'),d,d[d.length-1]>=d[0]);
-  $('tradeInfo').textContent=a.held>0?('تملك '+a.held+' | متوسط '+a.avg.toFixed(2)):'';
+  if(chartMode==='candle')drawCandles($('bigChart'),toCandles(a.hist));
+  else drawChart($('bigChart'),d,d[d.length-1]>=d[0]);
+  const pos=[];
+  if(a.held>0)pos.push('تملك '+a.held+' | متوسط '+a.avg.toFixed(2));
+  if(a.short>0){const spl=(a.shortAvg-a.price)*a.short;pos.push('🔻 شورت '+a.short+' | متوسط '+a.shortAvg.toFixed(2)+' | '+(spl>=0?'+':'')+fmt(spl));}
+  $('tradeInfo').textContent=pos.join(' — ');
 }
 function renderPortfolio(){
   const tb=$('pfTbl').tBodies[0];tb.innerHTML='';let any=false;
@@ -575,6 +802,46 @@ function renderCompany(){
   $('vWk').textContent=c.workers;
   $('sPrice').value=c.price;$('sRd').value=c.rd;$('sMk').value=c.marketing;$('sWk').value=c.workers;
 }
+let secFilter=null;
+function renderIdx(){
+  const g=$('idxGrid');g.innerHTML='';
+  SECTORS.forEach(sec=>{
+    const h=S.sectorHist[sec];if(!h||h.length<2)return;
+    const ch=(h[h.length-1]/h[0]-1)*100;
+    const d=document.createElement('div');d.className='idx';
+    d.innerHTML='<b>'+sec+'</b><span class="chg '+(ch>=0?'up':'dn')+'">'+(ch>=0?'▲':'▼')+' '+Math.abs(ch).toFixed(1)+'%</span>';
+    const cv=document.createElement('canvas');cv.style.cssText='width:100%;height:24px;display:block;margin-top:4px';
+    d.appendChild(cv);
+    d.onclick=()=>{secFilter=(secFilter===sec?null:sec);renderMarket();renderIdx();};
+    if(secFilter===sec)d.style.borderColor='var(--accent)';
+    g.appendChild(d);
+    spark(cv,h.slice(-96));
+  });
+}
+const ACHV=[
+ ['trade','📈','أول صفقة','نفّذ أول عملية تداول',()=>S.tx.length>0],
+ ['profit','💰','أول ربح حقيقي','ثروتك تتجاوز ١٢٠ ألف',()=>netWorth()>=120000],
+ ['halfm','🔥','نصف مليون','ثروتك تتجاوز ٥٠٠ ألف',()=>netWorth()>=500000],
+ ['million','👑','مليونير','ثروتك تتجاوز مليون دينار',()=>netWorth()>=1e6],
+ ['empire','🏰','إمبراطور','٥ ملايين دينار',()=>netWorth()>=5e6],
+ ['legend','🌟','أسطورة السوق','٢٠ مليون دينار',()=>netWorth()>=2e7],
+ ['founder','🏭','صاحب أعمال','أسّس شركتك الخاصة',()=>!!S.company],
+ ['ipo','📢','اكتتاب عام','اطرح شركتك في البورصة',()=>S.company&&S.company.public],
+ ['bear','🐻','دب السوق','اربح من صفقة شورت',()=>S.coveredProfit>1000],
+ ['div','🎁','مستثمر نائم','استلم توزيعات أرباح ٥ مرات',()=>S.divCount>=5],
+ ['banker','🏦','رجل البنك','وديعة تتجاوز ٥٠ ألف',()=>S.dep>=50000],
+ ['spy','🕵️','الذئب','اشترِ ٣ معلومات مسرّبة',()=>S.tips>=3],
+ ['old','📅','المخضرم','العب ١٠٠ يوم',()=>S.day>=100],
+];
+function checkAchv(){
+  ACHV.forEach(a=>{if(!S.achv[a[0]]&&a[4]()){S.achv[a[0]]=1;toast('🏅 إنجاز جديد: '+a[2]);}});
+}
+function renderAchv(){
+  $('achvList').innerHTML=ACHV.map(a=>{
+    const done=S.achv[a[0]];
+    return '<div class="achv '+(done?'done':'dim')+'"><span class="ic">'+a[1]+'</span><span><b>'+a[2]+'</b><br><span style="color:var(--dim);font-size:12px">'+a[3]+'</span></span>'+(done?'<span style="margin-inline-start:auto;color:var(--up)">✔</span>':'')+'</div>';
+  }).join('');
+}
 function renderRanks(){
   const list=S.npcs.map(n=>({name:n.name,worth:n.worth,ch:n.prev?(n.worth/n.prev-1)*100:0}));
   list.push({name:'أنت 🧑‍💼',worth:netWorth(),ch:S.nwHist.length>1?(netWorth()/S.nwHist[S.nwHist.length-2]-1)*100:0,me:1});
@@ -592,7 +859,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();}
 
 /* تبويبات */
 function showPage(p){
@@ -606,6 +873,10 @@ document.querySelectorAll('.qpct button').forEach(b=>b.onclick=()=>{
   $('qty').value=Math.max(1,Math.floor(S.cash*p/a.price));
 });
 $('btnBuy').onclick=buy;$('btnSell').onclick=sell;
+$('btnShort').onclick=shortSell;$('btnCover').onclick=cover;
+let chartMode='line';
+$('cLine').onclick=()=>{chartMode='line';$('cLine').classList.add('on');$('cCandle').classList.remove('on');renderAsset();};
+$('cCandle').onclick=()=>{chartMode='candle';$('cCandle').classList.add('on');$('cLine').classList.remove('on');renderAsset();};
 
 /* سرعات */
 let speed=0,timer=null;
@@ -642,7 +913,138 @@ $('btnFound').onclick=()=>{
 $('btnInvest').onclick=()=>{if(!S.company||S.cash<10000)return toast('❌ كاش غير كافٍ');S.cash-=10000;S.company.cash+=10000;log('ضخ رأس مال');save();renderAll();};
 $('btnWithdraw').onclick=()=>{if(!S.company||S.company.cash<10000)return toast('❌ خزينة الشركة أقل');S.company.cash-=10000;S.cash+=10000;log('سحب من الشركة');save();renderAll();};
 
-/* توست + مودال */
+/* أوامر محددة وتنبيهات */
+function renderPend(){
+  const items=[];
+  S.orders.forEach((o,i)=>items.push('<span class="badge" style="margin:2px">⚡ '+(o.dir==='buy'?'شراء':'بيع')+' '+o.q+' × '+S.assets[o.sym].name+' عند '+(o.dir==='buy'?'≤':'≥')+' '+o.target+' <a href="#" data-oi="'+i+'" style="color:var(--down)">✕</a></span>'));
+  S.alerts.forEach((al,i)=>items.push('<span class="badge" style="margin:2px">🔔 '+S.assets[al.sym].name+' '+(al.dir==='up'?'≥':'≤')+' '+al.target+' <a href="#" data-ai="'+i+'" style="color:var(--down)">✕</a></span>'));
+  $('pendList').innerHTML=items.join(' ')||'';
+  $('pendList').querySelectorAll('a').forEach(a=>a.onclick=e=>{
+    e.preventDefault();
+    if(a.dataset.oi!=null)S.orders.splice(+a.dataset.oi,1);
+    else S.alerts.splice(+a.dataset.ai,1);
+    save();renderPend();
+  });
+}
+$('btnLoBuy').onclick=()=>{
+  const t=+$('loPrice').value||0;const q=Math.max(1,Math.floor(+$('qty').value||0));
+  if(t<=0)return toast('❌ حدد السعر المستهدف');
+  S.orders.push({sym:sel,dir:'buy',q,target:t});
+  toast('⚡ أمر شراء محدد عند '+t);save();renderPend();
+};
+$('btnLoSell').onclick=()=>{
+  const t=+$('loPrice').value||0;const q=Math.max(1,Math.floor(+$('qty').value||0));
+  if(t<=0)return toast('❌ حدد السعر المستهدف');
+  S.orders.push({sym:sel,dir:'sell',q,target:t});
+  toast('⚡ أمر بيع محدد عند '+t);save();renderPend();
+};
+$('btnAlert').onclick=()=>{
+  const t=+$('loPrice').value||0;if(t<=0)return toast('❌ حدد السعر المستهدف');
+  const a=S.assets[sel];
+  S.alerts.push({sym:sel,dir:t>=a.price?'up':'down',target:t});
+  toast('🔔 تنبيه عند '+t);save();renderPend();
+};
+$('btnSnd').onclick=()=>{S.snd=!S.snd;$('btnSnd').textContent=S.snd?'🔊':'🔇';save();};
+/* ترقيات الشركة */
+const UPGS=[
+ ['line','🏭 خط إنتاج جديد','+٥٠٪ طاقة إنتاجية لكل مستوى'],
+ ['auto','🤖 نظام آلي','جودة أعلى كل يوم'],
+ ['brand','📣 بناء علامة تجارية','+٤٠٪ تأثير التسويق لكل مستوى'],
+];
+function upgCost(l){return 25000*Math.pow(l+1,2);}
+function renderUpg(){
+  const c=S.company;const r=$('upgRow');if(!r)return;
+  if(!c){r.innerHTML='';return;}
+  if(!c.up)c.up={line:0,auto:0,brand:0};
+  r.innerHTML='';
+  UPGS.forEach(u=>{
+    const lvl=c.up[u[0]];const cost=upgCost(lvl);
+    const b=document.createElement('button');b.className='btnGhost';b.style.fontSize='12.5px';
+    b.innerHTML=u[1]+' <span class="badge">'+lvl+'</span><br><span style="color:var(--gold)">'+fmtD(cost)+'</span>';
+    b.title=u[2];
+    b.onclick=()=>{
+      if(c.cash<cost)return toast('❌ خزينة الشركة تحتاج '+fmtD(cost));
+      c.cash-=cost;c.up[u[0]]++;
+      toast('⬆️ '+u[1]+' — مستوى '+c.up[u[0]]);
+      log('ترقية: '+u[1]);save();renderUpg();
+    };
+    r.appendChild(b);
+  });
+}
+/* توزيع الممتلكات */
+function renderDonut(){
+  const cv=$('donut');const ctx=cv.getContext('2d');
+  const W=cv.width=360,H=cv.height=360;ctx.clearRect(0,0,W,H);
+  const parts=[['كاش',S.cash,'#3b82f6']];
+  if(S.dep>0)parts.push(['وديعة',S.dep,'#06b6d4']);
+  let i=0;
+  for(const k in S.assets){const a=S.assets[k];if(a.held>0){parts.push([a.name,a.held*a.price,['#22c55e','#f59e0b','#a855f7','#ef4444','#eab308','#14b8a6','#f472b6','#94a3b8'][i%8]]);i++;}}
+  const cvv=companyValue();if(cvv>0)parts.push(['شركتك',cvv,'#fb923c']);
+  const tot=parts.reduce((s,p)=>s+Math.max(0,p[1]),0)||1;
+  let ang=-Math.PI/2;
+  parts.forEach(p=>{
+    const frac=Math.max(0,p[1])/tot;if(frac<=0)return;
+    ctx.beginPath();ctx.moveTo(180,180);
+    ctx.arc(180,180,160,ang,ang+frac*Math.PI*2);ctx.closePath();
+    ctx.fillStyle=p[2];ctx.fill();
+    ang+=frac*Math.PI*2;
+  });
+  ctx.beginPath();ctx.arc(180,180,88,0,7);ctx.fillStyle='#121828';ctx.fill();
+  ctx.direction='ltr';ctx.textAlign='center';
+  ctx.fillStyle='#e8edf7';ctx.font='bold 34px Tahoma';
+  ctx.fillText(fmt(tot),180,178);
+  ctx.fillStyle='#8b97b3';ctx.font='20px Tahoma';
+  ctx.fillText('دينار',180,206);
+  $('donutLeg').innerHTML=parts.slice(0,8).map(p=>'<span style="margin-inline-end:10px"><span style="color:'+p[2]+'">●</span> '+p[0]+' '+(Math.max(0,p[1])/tot*100).toFixed(0)+'%</span>').join('');
+}
+function renderStats(){
+  const nw0=100000;const roi=(netWorth()/nw0-1)*100;
+  $('statKpis').innerHTML=
+    kpi('العائد الكلي',(roi>=0?'+':'')+roi.toFixed(1)+'%')+
+    kpi('أيام اللعب',S.day)+
+    kpi('صفقات منفذة',S.stats.trades)+
+    kpi('إجمالي التوزيعات',fmtD(S.stats.divTotal))+
+    kpi('أرباح الشورت',fmtD(S.coveredProfit))+
+    kpi('إنجازات',Object.keys(S.achv).length+'/'+ACHV.length);
+}
+/* الاكتتاب العام */
+function renderIPO(){
+  const c=S.company;
+  const b=$('btnIPO');
+  if(!b)return;
+  const can=!!c&&!c.public&&companyValue()>=150000;
+  b.classList.toggle('hidden',!can);
+}
+$('btnIPO').onclick=()=>{
+  const c=S.company;if(!c||c.public)return;
+  const val=companyValue();if(val<150000)return toast('❌ قيمة الشركة أقل من ١٥٠ ألف');
+  let key='س:'+c.name;let i=2;
+  while(S.assets[key]){key='س:'+c.name+' '+i;i++;}
+  const price=val/1000;
+  S.assets[key]={kind:'stock',name:c.name,sector:c.sector,price,base:price,vol:0.05,sent:0.05,trend:0,hist:[price],held:700,avg:price*0.7,short:0,shortAvg:0,div:0.006};
+  S.cash+=val*0.30;
+  c.public=true;c.ticker=key;
+  toast('📢 اكتتاب ناجح! حصلت على '+fmtD(val*0.30)+' مقابل ٣٠٪ من '+c.name);
+  pushNews(S,'اكتتاب عام: شركة "'+c.name+'" تنضم للبورصة بقيمة '+fmtD(val),0.05,false,true);
+  log('اكتتاب '+c.name+' — بيع ٣٠٪');
+  save();checkAchv();renderAll();refreshNewsUI();
+};
+/* المعلومات المسرّبة */
+$('btnTip').onclick=()=>{
+  if(S.cash<5000)return toast('❌ تحتاج ٥٬٠٠٠ دينار');
+  if(!S.nextNews)return toast('🕵️ لا توجد معلومة متاحة الآن — عُد لاحقًا');
+  if(S.tipUsed)return toast('🕵️ اشتريت معلومة هذه الجولة بالفعل');
+  S.cash-=5000;S.tips++;S.tipUsed=1;
+  const n=NEWS_T[S.nextNews.i];
+  let target='';
+  if(n.k==='sector')target=' — القطاع المتأثر: '+n.s;
+  else if(n.k==='fx')target=' — العملة: '+n.s;
+  else if(n.k==='cmd')target=' — السلعة: '+n.s;
+  else if(n.k==='all')target=' — سيؤثر على السوق كله';
+  else if(n.k==='rate')target=' — قرار فائدة';
+  $('tipOut').innerHTML='<div class="newsItem '+(n.g?'good':'hot')+'">🕵️ خلال '+S.nextNews.h+' ساعة تقريبًا: <b>'+n.t+'</b>'+target+'</div>';
+  log('شراء معلومة مسرّبة');save();checkAchv();renderHead();
+};
 function toast(t){const d=document.createElement('div');d.className='toast';d.textContent=t;$('toasts').appendChild(d);setTimeout(()=>d.remove(),4200);}
 function showModal(h){$('modal').innerHTML=h;$('modalBg').classList.add('on');}
 function hideModal(){$('modalBg').classList.remove('on');}
@@ -684,6 +1086,45 @@ if(location.hash==='#test'){
     ok('ثروة محسوبة',isFinite(netWorth())&&netWorth()>0);
     ok('شركة تعمل',S.company&&isFinite(S.company.cash));
     quarterReport();ok('تقرير ربع سنوي',$('modalBg').classList.contains('on'));hideModal();
+    // شورت وتغطية
+    sel='س:سحابة';$('qty').value=10;const sc0=S.cash;shortSell();
+    ok('شورت 10',S.assets[sel].short===10&&S.cash>sc0);
+    $('qty').value=10;cover();
+    ok('تغطية شورت',S.assets[sel].short===0);
+    // معلومة مسرّبة
+    S.nextNews={i:0,h:5};S.tipUsed=0;S.cash+=10000;
+    $('btnTip').click();
+    ok('معلومة مسرّبة',S.tips===1&&$('tipOut').textContent.length>10);
+    // اكتتاب عام
+    if(S.company){S.company.track=new Array(365).fill(5000);S.company.lastYearProfit=365*5000;S.company.quality=50;S.company.cash=80000;
+      renderIPO();ok('زر الاكتتاب يظهر',!$('btnIPO').classList.contains('hidden'));
+      const cv0=S.cash;$('btnIPO').click();
+      ok('اكتتاب',S.company.public===true&&S.cash>cv0&&!!S.assets[S.company.ticker]);
+    }
+    // شموع ومؤشرات
+    chartMode='candle';renderAsset();ok('شموع يابانية',true);
+    chartMode='line';
+    ok('مؤشرات قطاعات',SECTORS.every(s=>S.sectorHist[s]&&S.sectorHist[s].length>1));
+    checkAchv();ok('إنجازات',Object.keys(S.achv).length>=3);
+    ok('ثروة مع الشورت',isFinite(netWorth()));
+    // أوامر محددة وتنبيهات
+    sel='س:نخبة تك';
+    S.orders.push({sym:sel,dir:'buy',q:5,target:1e9});
+    const oh=S.assets[sel].held;
+    endOfDay();
+    ok('تنفيذ أمر محدد',S.assets[sel].held===oh+5&&S.orders.length===0);
+    S.alerts.push({sym:sel,dir:'up',target:1});
+    endOfDay();
+    ok('تنبيه سعري',S.alerts.length===0);
+    // ترقية شركة
+    if(S.company){S.company.cash+=100000;const ub=S.company.cash;
+      renderUpg();
+      const btn=$('upgRow').querySelector('button');btn.click();
+      ok('ترقية شركة',S.company.up.line===1&&S.company.cash<ub);
+    }
+    // جريدة الأسبوع
+    S.day=14;weeklyPaper();ok('جريدة الأسبوع',$('modalBg').classList.contains('on'));hideModal();
+    renderDonut();renderStats();ok('دونات وإحصائيات',$('statKpis').textContent.length>5);
     save();ok('حفظ',!!localStorage.getItem('econLive1'));
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
   }catch(e){out.push('ERROR '+(e&&e.message));}
@@ -692,4 +1133,4 @@ if(location.hash==='#test'){
 }
 </script>
 </body>
-      </html>
+</html>
