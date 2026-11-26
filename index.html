@@ -239,6 +239,10 @@ tr.row:hover,tr.row.sel{background:#182442}
   <div class="card"><h3>أداء الثروة</h3><canvas id="nwChart" style="width:100%;height:160px;display:block"></canvas></div>
   <div class="grid2">
     <div class="card"><h3>توزيع ممتلكاتك</h3><canvas id="donut" style="width:180px;height:180px;display:block;margin:0 auto"></canvas><div id="donutLeg" style="font-size:12px;color:var(--dim);margin-top:8px"></div></div>
+    <div class="card" id="challengeCard">
+    <h3>⚔️ وضع التحدي: سباق المليون</h3>
+    <div id="challengeBody"></div>
+    </div>
     <div class="card" id="prestigeCard">
     <h3>⭐ نظام الأسطورة</h3>
     <p id="prestigeInfo" style="font-size:13px;color:var(--dim)"></p>
@@ -437,7 +441,7 @@ function freshState(){
   st.theme='dark';st.bubbles={};st.offers=0;st.quests=[];st.questDay=0;st.bankruptcies=0;
   st.lotto={pool:20000,tickets:0};st.moodHist=[0.15];st.sortKey=null;
   st.notifs=[];st.splits=0;
-  st.prestige=0;st.gEvent=null;st.cityStatus={};
+  st.prestige=0;st.gEvent=null;st.cityStatus={};st.challenge=null;
   pushNews(st,'افتتاح السوق العالمية للمحاكاة — حظ موفق أيها المستثمر!',0,false);
   return st;
 }
@@ -463,6 +467,7 @@ function migrate(){
   if(!S.notifs)S.notifs=[];if(!S.splits)S.splits=0;
   if(!S.prestige)S.prestige=0;if(S.gEvent===undefined)S.gEvent=null;
   if(!S.cityStatus)S.cityStatus={};
+  if(S.challenge===undefined)S.challenge=null;
 }
 function pushNews(st,text,impact,hot,good){
   st.news.unshift({d:st.day,h:st.hour,text,hot:!!hot,good:!!good});
@@ -557,6 +562,7 @@ function endOfDay(){
   }
   renderGEvent();
   // اقتصادات المدن تتغير
+  tickChallenge();
   CITIES.forEach(ct=>{
     const cur=S.cityStatus[ct.n]||'normal';
     if(Math.random()<0.10){
@@ -1193,6 +1199,7 @@ const ACHV=[
  ['banker','🏦','رجل البنك','وديعة تتجاوز ٥٠ ألف',()=>S.dep>=50000],
  ['spy','🕵️','الذئب','اشترِ ٣ معلومات مسرّبة',()=>S.tips>=3],
  ['old','📅','المخضرم','العب ١٠٠ يوم',()=>S.day>=100],
+ ['champion','🏆','بطل التحدي','اكسب سباق المليون ضد المنافسين',()=>!!(S.achv&&S.achv.champion)],
 ];
 function checkAchv(){
   ACHV.forEach(a=>{if(!S.achv[a[0]]&&a[4]()){S.achv[a[0]]=1;toast('🏅 إنجاز جديد: '+a[2]);}});
@@ -1220,7 +1227,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();}
 
 /* تبويبات */
 function showPage(p){
@@ -1288,6 +1295,48 @@ $('btnLotto').onclick=()=>{
 function renderLotto(){
   $('lottoPool').textContent=fmtD(S.lotto.pool);
   $('lottoT').textContent=S.lotto.tickets;
+}
+function startChallenge(){
+  const start=netWorth();
+  S.challenge={start:start,target:start*2,day0:S.day,days:30,
+    rivals:[{n:'سلطان المضاربة',w:start},{n:'هالة الحذرة',w:start},{n:'ماجد المغامر',w:start}]};
+  toast('⚔️ بدأ السباق! ضاعف ثروتك خلال 30 يوم');beep(1000,.2);
+  save();renderChallenge();
+}
+function tickChallenge(){
+  const ch=S.challenge;if(!ch)return;
+  ch.rivals.forEach(r=>{r.w=Math.max(1000,r.w*(1+rnd(-0.01,0.038)));});
+  const nw=netWorth();
+  const winR=ch.rivals.find(r=>r.w>=ch.target);
+  if(nw>=ch.target){
+    S.challenge=null;
+    if(!S.achv)S.achv={};S.achv.champion=1;
+    const bonus=Math.round(ch.start*0.25*pmult());S.cash+=bonus;
+    showModal('<h2>🏆 كسبت سباق المليون!</h2><p style="line-height:1.9">ضاعفت ثروتك قبل كل المنافسين. مكافأة البطل: <b>'+fmtD(bonus)+'</b> وإنجاز «بطل التحدي».</p><div class="tradeRow"><button onclick="hideModal()">يلا نكمل</button></div>');
+    beep(1400,.35);save();
+  }else if(winR){
+    S.challenge=null;
+    showModal('<h2>😤 '+winR.n+' سبقك!</h2><p style="line-height:1.9">وصل لهدف المضاعفة قبلك. جرب تاني — السوق ما بيرحمش.</p><div class="tradeRow"><button onclick="hideModal()">حسنًا</button></div>');
+  }else if(S.day>=ch.day0+ch.days){
+    const all=ch.rivals.map(r=>({n:r.n,w:r.w})).concat([{n:'أنت',w:nw}]).sort((a,b)=>b.w-a.w);
+    const rank=all.findIndex(x=>x.n==='أنت')+1;
+    S.challenge=null;
+    showModal('<h2>⏰ انتهى السباق</h2><p style="line-height:1.9">ترتيبك: <b>#'+rank+'</b> من 4.<br>'+all.map((x,i)=>(i+1)+'. '+x.n+' — '+fmtD(x.w)).join('<br>')+'</p><div class="tradeRow"><button onclick="hideModal()">حسنًا</button></div>');
+  }
+}
+function renderChallenge(){
+  const el=$('challengeBody');if(!el)return;
+  const ch=S.challenge;
+  if(!ch){
+    el.innerHTML='<p style="font-size:13px;color:var(--dim);margin-bottom:8px">سباق 30 يوم ضد 3 منافسين أذكياء: أول واحد يضاعف صافي ثروته يكسب مكافأة 25٪ وإنجاز «بطل التحدي» 🏆</p><div class="tradeRow"><button class="btnShort" id="btnChallenge">ابدأ السباق</button></div>';
+    $('btnChallenge').onclick=startChallenge;
+    return;
+  }
+  const nw=netWorth();
+  const left=ch.day0+ch.days-S.day;
+  const bar=(w)=>{const p=Math.min(100,Math.round(w/ch.target*100));return '<div style="background:var(--panel2);border-radius:6px;height:8px;overflow:hidden"><div style="width:'+p+'%;height:100%;background:linear-gradient(90deg,#22c55e,#a855f7)"></div></div>';};
+  el.innerHTML='<p style="font-size:13px;margin-bottom:8px">الهدف: <b>'+fmtD(ch.target)+'</b> — متبقٍ <b>'+left+'</b> يوم</p>'+
+    [{n:'أنت',w:nw}].concat(ch.rivals).map(x=>'<div style="font-size:12.5px;margin:6px 0"><div style="display:flex;justify-content:space-between"><span>'+x.n+'</span><span>'+fmtD(x.w)+'</span></div>'+bar(x.w)+'</div>').join('');
 }
 function renderBranches(){
   const el=$('branchList');if(!el)return;
@@ -1792,6 +1841,17 @@ if(location.hash==='#test'){
     ok('فرع يكسب وقت الطفرة',S.company.branchProfit>0);
     S.cityStatus['دبي']='bust';runCompany();
     ok('الكساد يقلل مكسب الفرع',S.company.branchProfit<4000*2*1.45);
+    // وضع التحدي
+    S.challenge=null;renderChallenge();
+    ok('زر التحدي يظهر',!!$('btnChallenge'));
+    $('btnChallenge').click();
+    ok('تحدٍ بدأ',!!S.challenge&&S.challenge.rivals.length===3);
+    const rw0=S.challenge.rivals[0].w;tickChallenge();
+    ok('منافسو التحدي يتحركون',S.challenge===null||S.challenge.rivals[0].w!==rw0);
+    // فوز مباشر
+    S.challenge={start:100000,target:200000,day0:S.day,days:30,rivals:[{n:'x',w:100000}]};
+    S.cash=500000;tickChallenge();
+    ok('فوز التحدي',S.challenge===null&&S.achv.champion===1);hideModal();
     save();ok('حفظ',!!localStorage.getItem('econLive1'));
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
   }catch(e){out.push('ERROR '+(e&&e.message));}
