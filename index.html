@@ -452,6 +452,9 @@ function freshState(){
   return st;
 }
 function migrate(){
+  // أصول أُضيفت في تحديثات لاحقة تُدمج في الحفظ القديم
+  const defs=freshState().assets;
+  for(const k in defs){if(!S.assets[k])S.assets[k]=defs[k];}
   for(const k in S.assets){const a=S.assets[k];if(a.short==null)a.short=0;if(a.shortAvg==null)a.shortAvg=0;}
   if(!S.nextNews&&S.nextNews!==null)S.nextNews=null;
   if(!S.achv)S.achv={};if(!S.sectorHist){S.sectorHist={};SECTORS.forEach(s=>S.sectorHist[s]=[100]);}
@@ -1885,6 +1888,9 @@ if(location.hash==='#test'){
     const snap={};Object.keys(S.assets).forEach(k=>{if(S.assets[k].kind==='stock')snap[k]=S.assets[k].price;});
     endOfDay();
     ok('موسم أرباح يحرك الأسعار',Object.keys(snap).some(k=>S.assets[k].price!==snap[k]));
+    // ترحيل الحفظ القديم
+    delete S.assets['ك:إيثريوم'];migrate();
+    ok('ترحيل يعيد الأصول الجديدة',!!S.assets['ك:إيثريوم']);
     save();ok('حفظ',!!localStorage.getItem('econLive1'));
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
   }catch(e){out.push('ERROR '+(e&&e.message));}
