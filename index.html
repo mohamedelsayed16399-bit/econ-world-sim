@@ -11,6 +11,11 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
+body.light{--bg:#f2f5fb;--panel:#ffffff;--panel2:#eef2f9;--line:#d5deee;--txt:#17203a;--dim:#5b6a8a}
+body.light .newsItem{background:#eef2f9}
+body.light #topbar{background:linear-gradient(180deg,#ffffff,#f2f5fb)}
+body.light #tickerWrap,body.light #goalBar{background:#e9eef7}
+body.light .toast{background:#fff;color:#17203a}
 body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',Tahoma,Arial,sans-serif;overflow-x:hidden;font-size:15px}
 button{font-family:inherit;cursor:pointer;border:none;border-radius:10px}
 input,select{font-family:inherit}
@@ -127,6 +132,7 @@ tr.row:hover,tr.row.sel{background:#182442}
   <div class="stat"><b id="hDay">—</b><span>اليوم</span></div>
   <div class="stat"><b id="hMood">—</b><span>مزاج السوق</span></div>
   <div id="speedCtl">
+    <button id="btnTheme" title="المظهر">🌓</button>
     <button id="sp0" class="on">⏸</button>
     <button id="sp1">1x</button>
     <button id="sp2">4x</button>
@@ -184,6 +190,10 @@ tr.row:hover,tr.row.sel{background:#182442}
     <div id="pendList" style="margin-top:6px"></div>
   </div>
   <div class="card">
+    <h3>🎯 مهام اليوم <button class="btnGhost" id="btnAdvisor" style="float:left;font-size:12px">🤖 اسأل المستشار</button></h3>
+    <div id="questList"></div>
+  </div>
+  <div class="card">
     <h3>مؤشرات القطاعات</h3>
     <div class="idxGrid" id="idxGrid"></div>
   </div>
@@ -213,7 +223,8 @@ tr.row:hover,tr.row.sel{background:#182442}
   <div class="card"><h3>أداء الثروة</h3><canvas id="nwChart" style="width:100%;height:160px;display:block"></canvas></div>
   <div class="grid2">
     <div class="card"><h3>توزيع ممتلكاتك</h3><canvas id="donut" style="width:180px;height:180px;display:block;margin:0 auto"></canvas><div id="donutLeg" style="font-size:12px;color:var(--dim);margin-top:8px"></div></div>
-    <div class="card"><h3>إحصائياتك</h3><div class="kpis" id="statKpis"></div></div>
+    <div class="card"><h3>إحصائياتك</h3><div class="kpis" id="statKpis"></div>
+      <button class="btnGhost" id="btnShare" style="margin-top:10px">📤 انسخ ملخص نتيجتك</button></div>
   </div>
   <div class="card"><h3>سجل العمليات</h3><div id="txLog" style="max-height:220px;overflow-y:auto"></div></div>
 </div>
@@ -381,6 +392,7 @@ function freshState(){
   st.orders=[];st.alerts=[];st.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};st.snd=true;
   st.props={};st.propPrice={'شقة وسط البلد':60000,'محل تجاري':120000,'فيلا':200000,'برج مكاتب':500000};
   st.propBase=Object.assign({},st.propPrice);st.bonds=[];st.goal=null;st.rival=null;st.tut=0;st.rentTotal=0;
+  st.theme='dark';st.bubbles={};st.offers=0;st.quests=[];st.questDay=0;st.bankruptcies=0;
   pushNews(st,'افتتاح السوق العالمية للمحاكاة — حظ موفق أيها المستثمر!',0,false);
   return st;
 }
@@ -399,6 +411,8 @@ function migrate(){
   if(!S.propBase)S.propBase=Object.assign({},S.propPrice);
   if(!S.bonds)S.bonds=[];if(S.goal===undefined)S.goal=null;if(S.rival===undefined)S.rival=null;
   if(!S.tut)S.tut=0;if(!S.rentTotal)S.rentTotal=0;
+  if(!S.theme)S.theme='dark';if(!S.bubbles)S.bubbles={};if(S.offers==null)S.offers=0;
+  if(!S.quests)S.quests=[];if(!S.questDay)S.questDay=0;if(!S.bankruptcies)S.bankruptcies=0;
 }
 function pushNews(st,text,impact,hot,good){
   st.news.unshift({d:st.day,h:st.hour,text,hot:!!hot,good:!!good});
@@ -540,6 +554,42 @@ function endOfDay(){
     if(Math.random()<0.06){S.rival.strength=Math.min(2,S.rival.strength+0.12);
       pushNews(S,'منافسك "'+S.rival.name+'" يطلق منتجًا جديدًا',-0.02,true);refreshNewsUI();}
   }
+  // فقاعات وانهيارات
+  SECTORS.forEach(sec=>{
+    const h=S.sectorHist[sec];
+    if(h&&h.length>30){
+      const g30=h[h.length-1]/h[Math.max(0,h.length-30)]-1;
+      if(g30>0.35)S.bubbles[sec]=(S.bubbles[sec]||0)+1;else S.bubbles[sec]=0;
+      if(S.bubbles[sec]>2&&Math.random()<0.09){
+        S.bubbles[sec]=0;
+        for(const k in S.assets){const a=S.assets[k];if(a.kind==='stock'&&a.sector===sec)a.sent-=0.28;}
+        S.mood-=0.08;
+        pushNews(S,'💥 فقاعة قطاع '+sec+' تنفجر بعد صعود جنوني!',-0.2,true);
+        toast('💥 فقاعة تنفجر في قطاع '+sec+'!');beep(180,.3);
+        refreshNewsUI();
+      }
+    }
+  });
+  if(Math.random()<0.006){
+    for(const k in S.assets){const a=S.assets[k];if(a.kind==='stock')a.sent-=0.18;}
+    S.mood-=0.15;
+    pushNews(S,'🌪️ موجة بيع عنيفة تجتاح الأسواق العالمية!',-0.15,true);
+    toast('🌪️ انهيار سوقي! كل الأسهم تهبط');beep(140,.4);
+    refreshNewsUI();
+  }
+  // اجتماع البنك المركزي كل 15 يومًا
+  if(S.day%15===0){
+    const ch=(Math.random()<0.5?-1:1)*rnd(0.0025,0.015);
+    S.rate=Math.max(0.005,S.rate+ch);
+    pushNews(S,'🏦 قرار البنك المركزي: الفائدة '+(S.rate*100).toFixed(2)+'% ('+(ch>0?'رفع':'خفض')+')',ch,true,ch<0);
+    refreshNewsUI();
+  }
+  // عروض استحواذ على شركتك
+  if(S.company&&!S.company.public&&companyValue()>100000&&Math.random()<0.05)maOffer();
+  // تجدد العالم + مهام
+  worldRenewal();
+  if(S.day!==S.questDay)rollQuests();
+  checkQuests();
   // تشغيل الشركة
   if(S.company)runCompany();
   // NPCs
@@ -663,6 +713,123 @@ function cover(){
   save();checkAchv();renderAll();
 }
 function log(t){S.tx.unshift({d:S.day,t});if(S.tx.length>80)S.tx.pop();}
+const NEWCO=['روافد','قمة','درة','أفق','سدرة','كيان','تمكين','وفاق','بدر','نماء','ريادة','سواعد'];
+function worldRenewal(){
+  // إفلاس
+  for(const k of Object.keys(S.assets)){
+    const a=S.assets[k];
+    if(a.kind!=='stock')continue;
+    if(S.company&&S.company.ticker===k)continue;
+    if(a.price<a.base*0.12){
+      const lost=a.held*a.price;
+      if(a.short>0){S.cash+=a.short*a.price*0.5;}
+      delete S.assets[k];
+      S.bankruptcies++;
+      pushNews(S,'⚰️ إفلاس شركة "'+a.name+'" وشطبها من البورصة!',-0.03,true);
+      if(lost>0){toast('⚰️ أفلست '+a.name+' — خسرت '+fmtD(lost));}
+      refreshNewsUI();
+    }
+  }
+  // اكتتابات جديدة تحيي السوق
+  const stockCount=Object.keys(S.assets).filter(k=>S.assets[k].kind==='stock').length;
+  if(stockCount<18&&(S.day%9===0||stockCount<12)){
+    const sec=SECTORS[Math.floor(Math.random()*SECTORS.length)];
+    let nm=NEWCO[Math.floor(Math.random()*NEWCO.length)]+' '+sec;
+    let key='س:'+nm;let i=2;
+    while(S.assets[key]){key='س:'+nm+' '+i;i++;nm=nm+' '+i;}
+    const p=rnd(18,130);
+    S.assets[key]={kind:'stock',name:nm,sector:sec,price:p,base:p,vol:rnd(0.03,0.06),sent:0.06,trend:0,hist:[p],held:0,avg:0,short:0,shortAvg:0,div:rnd(0.004,0.014)};
+    pushNews(S,'🆕 اكتتاب جديد: شركة "'+nm+'" تنضم للبورصة في قطاع '+sec,0.03,false,true);
+    refreshNewsUI();
+  }
+}
+/* مهام اليوم */
+const QUEST_DEFS={
+  own_sector:{t:q=>'املك '+q.n+' سهمًا من قطاع '+q.arg,test:q=>{let n=0;for(const k in S.assets){const a=S.assets[k];if(a.kind==='stock'&&a.sector===q.arg)n+=a.held;}return n>=q.n;}},
+  trades:{t:q=>'نفّذ '+q.n+' صفقات اليوم',test:q=>S.stats.trades-(q.start||0)>=q.n},
+  dep:{t:q=>'ارفع وديعتك البنكية إلى '+fmtD(q.n),test:q=>S.dep>=q.n},
+  prop:{t:q=>'املك '+q.n+' عقارات',test:q=>{let n=0;for(const p in S.props)n+=S.props[p].qty;return n>=q.n;}},
+  shortp:{t:q=>'اربح '+fmtD(q.n)+' من الشورت',test:q=>S.coveredProfit-(q.start||0)>=q.n},
+  cash:{t:q=>'اجمع كاش '+fmtD(q.n),test:q=>S.cash>=q.n},
+};
+function rollQuests(){
+  const pool=[
+    {k:'own_sector',arg:SECTORS[Math.floor(Math.random()*SECTORS.length)],n:[20,50,100][Math.floor(Math.random()*3)]},
+    {k:'trades',n:4+Math.floor(Math.random()*4),start:S.stats.trades},
+    {k:'dep',n:Math.round((S.dep+15000)/5000)*5000},
+    {k:'prop',n:1+Object.values(S.props).reduce((s,p)=>s+p.qty,0)},
+    {k:'shortp',n:3000+Math.floor(Math.random()*3000),start:S.coveredProfit},
+    {k:'cash',n:Math.round(S.cash*1.1/5000)*5000+5000},
+  ];
+  S.quests=[];
+  while(S.quests.length<3&&pool.length){
+    const q=pool.splice(Math.floor(Math.random()*pool.length),1)[0];
+    q.reward=2500+Math.floor(Math.random()*4000);q.done=0;
+    S.quests.push(q);
+  }
+  S.questDay=S.day;
+}
+function checkQuests(){
+  S.quests.forEach(q=>{
+    if(!q.done&&QUEST_DEFS[q.k].test(q)){
+      q.done=1;S.cash+=q.reward;
+      toast('✅ مهمة أنجزت! مكافأة '+fmtD(q.reward));beep(1050,.12);
+      log('مهمة: '+QUEST_DEFS[q.k].t(q));
+    }
+  });
+}
+function renderQuests(){
+  const el=$('questList');if(!el)return;
+  if(!S.quests.length)return;
+  el.innerHTML=S.quests.map(q=>'<div class="achv '+(q.done?'done':'')+'"><span class="ic">'+(q.done?'✅':'🎯')+'</span><span style="flex:1">'+QUEST_DEFS[q.k].t(q)+'</span><b style="color:var(--gold)">'+fmtD(q.reward)+'</b></div>').join('');
+}
+/* المستشار */
+function advisor(){
+  let best=null,cheap=null,worst=null;
+  for(const k in S.assets){const a=S.assets[k];if(a.kind!=='stock')continue;
+    const h=a.hist;const g30=h.length>30?a.price/h[h.length-30]-1:0;
+    if(!best||g30>best.g)best={n:a.name,g:g30,sec:a.sector};
+    const ratio=a.price/a.base;
+    if(ratio>0.4&&a.sent>-0.05&&(!cheap||ratio<cheap.r))cheap={n:a.name,r:ratio};
+    if(!worst||g30<worst.g)worst={n:a.name,g:g30};
+  }
+  const tips=[];
+  if(best)tips.push('📈 أقوى زخم حاليًا: <b>'+best.n+'</b> ('+(best.g*100).toFixed(0)+'% مؤخرًا) — ركوب الموجة خيار.');
+  if(cheap)tips.push('💎 فرصة مقيمة بأقل من قيمتها: <b>'+cheap.n+'</b> يتداول عند '+(cheap.r*100).toFixed(0)+'% من قيمته الأساسية.');
+  if(worst&&worst.g<-0.1)tips.push('⚠️ ابتعد عن <b>'+worst.n+'</b> — اتجاه هابط قوي، أو جرّب الشورت عليه.');
+  if(S.mood<-0.2)tips.push('🌊 السوق في ذعر — عادةً أفضل أوقات الشراء للصبورين.');
+  if(S.mood>0.4)tips.push('🎈 السوق مفرط التفاؤل — جني بعض الأرباح حكمة.');
+  if(S.company)tips.push('🏭 شركتك: '+(S.company.todayProfit>=0?'تربح '+fmtD(S.company.todayProfit)+' يوميًا — فكّر في ترقية':'تخسر اليوم — راجع السعر مقابل الجودة')+'.');
+  showModal('<h2>🤖 المستشار الآلي</h2><div style="font-size:14px;line-height:2">'+tips.join('<br>')+'</div><button class="bigBtn" style="width:100%;margin-top:12px" onclick="hideModal()">فهمت</button>');
+}
+/* عرض استحواذ */
+let maPending=null;
+function maOffer(){
+  const c=S.company;const val=companyValue();
+  const mult=rnd(1.2,1.8);const offer=Math.round(val*mult);
+  maPending=offer;S.offers++;
+  const buyer=S.rival?S.rival.name:'ائتلاف مستثمرين';
+  showModal('<h2>🤝 عرض استحواذ!</h2>'+
+    '<div style="font-size:14px;line-height:1.8;margin-bottom:10px">تقدّم <b>'+buyer+'</b> بعرض لشراء <b>'+c.name+'</b> مقابل <b style="color:var(--gold)">'+fmtD(offer)+'</b> نقدًا ('+(mult*100).toFixed(0)+'% من قيمتها التقديرية).</div>'+
+    '<div style="display:flex;gap:8px">'+
+    '<button class="btnBuy" style="flex:1" onclick="maAccept()">بيع الشركة 💰</button>'+
+    '<button class="btnSell" style="flex:1" onclick="maDecline()">رفض العرض</button></div>');
+}
+function maAccept(){
+  const c=S.company;if(!c||!maPending)return;
+  S.cash+=maPending;
+  toast('💰 بعت '+c.name+' مقابل '+fmtD(maPending)+'!');
+  pushNews(S,'صفقة كبرى: بيع شركة "'+c.name+'" مقابل '+fmtD(maPending),0.02,false,true);
+  log('بيع الشركة '+fmtD(maPending));
+  S.company=null;S.rival=null;maPending=null;
+  hideModal();refreshNewsUI();save();checkAchv();renderAll();
+}
+function maDecline(){
+  if(S.rival)S.rival.strength=Math.min(2,S.rival.strength+0.15);
+  toast('✊ رفضت العرض — المنافس غاضب!');
+  log('رفض عرض استحواذ '+fmtD(maPending));
+  maPending=null;hideModal();save();renderAll();
+}
 /* جريدة الأسبوع */
 function rollGoal(){
   const start=netWorth();
@@ -851,10 +1018,12 @@ function renderBank(){
   $('bkRate').textContent=(S.rate*100).toFixed(1)+'%';
   $('bkDep').textContent=fmtD(S.dep);
   $('bkLoan').textContent=fmtD(S.loan);
+  const nextCB=S.day+(15-S.day%15);
   const gdp=50+S.mood*30;
   $('macroKpis').innerHTML=
     kpi('النمو الاقتصادي',gdp.toFixed(1)+'%')+kpi('التضخم',(S.infl*100).toFixed(1)+'%')+
-    kpi('الفائدة',(S.rate*100).toFixed(1)+'%')+kpi('ثقة المستهلك',(60+S.mood*40).toFixed(0)+'/100');
+    kpi('الفائدة',(S.rate*100).toFixed(1)+'%')+kpi('ثقة المستهلك',(60+S.mood*40).toFixed(0)+'/100')+
+    kpi('🏦 اجتماع المركزي القادم','يوم '+nextCB)+kpi('💥 فقاعات محتملة',Object.values(S.bubbles).filter(v=>v>2).length||'لا شيء');
 }
 function kpi(l,v){return '<div class="kpi"><b>'+v+'</b><span>'+l+'</span></div>';}
 function renderCompany(){
@@ -930,7 +1099,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();}
 
 /* تبويبات */
 function showPage(p){
@@ -957,6 +1126,8 @@ function setSpeed(s){
   if(timer)clearInterval(timer);timer=null;
   if(s>0)timer=setInterval(()=>{for(let i=0;i<1;i++)tick();if(tickCount%2===0)renderHead();},IV[s]);
 }
+function applyTheme(){document.body.classList.toggle('light',S.theme==='light');}
+$('btnTheme').onclick=()=>{S.theme=S.theme==='light'?'dark':'light';applyTheme();save();};
 $('sp0').onclick=()=>setSpeed(0);$('sp1').onclick=()=>setSpeed(1);$('sp2').onclick=()=>setSpeed(2);$('sp3').onclick=()=>setSpeed(3);
 
 /* بنك */
@@ -1145,7 +1316,12 @@ function renderStats(){
     kpi('صفقات منفذة',S.stats.trades)+
     kpi('إجمالي التوزيعات',fmtD(S.stats.divTotal))+
     kpi('أرباح الشورت',fmtD(S.coveredProfit))+
-    kpi('إنجازات',Object.keys(S.achv).length+'/'+ACHV.length);
+    kpi('إنجازات',Object.keys(S.achv).length+'/'+ACHV.length)+
+    kpi('عروض استحواذ',S.offers);
+}
+function shareResult(){
+  const t='📊 نتيجتي في "اقتصاد حي": ثروة '+fmtD(netWorth())+' بعد '+S.day+' يوم | العائد '+((netWorth()/100000-1)*100).toFixed(0)+'% | إنجازات '+Object.keys(S.achv).length+'/'+ACHV.length+' 🏆';
+  try{navigator.clipboard.writeText(t);toast('📤 نُسخ الملخص — شاركه أين تريد!');}catch(e){showModal('<h2>📤 ملخص نتيجتك</h2><p style="font-size:14px;line-height:1.8">'+t+'</p><button class="bigBtn" style="width:100%;margin-top:10px" onclick="hideModal()">تمام</button>');}
 }
 /* الاكتتاب العام */
 function renderIPO(){
@@ -1190,9 +1366,12 @@ function showModal(h){$('modal').innerHTML=h;$('modalBg').classList.add('on');}
 function hideModal(){$('modalBg').classList.remove('on');}
 $('modalBg').onclick=e=>{if(e.target.id==='modalBg')hideModal();};
 
+$('btnShare').onclick=shareResult;
+$('btnAdvisor').onclick=advisor;
 /* بدء */
 if(!load())S=freshState();
 migrate();
+applyTheme();
 renderAll();refreshNewsUI();
 if(!S.tut){
   showModal('<h2>👋 أهلًا بك في "اقتصاد حي"</h2>'+
@@ -1298,6 +1477,39 @@ if(location.hash==='#test'){
     ok('منافس موجود',!!S.rival);
     if(S.company){S.company.cash+=20000;const rs=S.rival.strength;$('btnAttack').click();
       ok('حملة ضد المنافس',S.rival.strength!==rs);}
+    // فقاعة وانهيار
+    S.bubbles['تقنية']=5;
+    let crashed=false;
+    for(let i=0;i<80&&!crashed;i++){const s0=S.assets['س:نخبة تك'].sent;endOfDay();if(S.assets['س:نخبة تك'].sent<s0-0.2)crashed=true;}
+    ok('فقاعة تنفجر',crashed||S.bubbles['تقنية']===0);
+    // اجتماع مركزي
+    S.day=15;const r0=S.rate;endOfDay();
+    ok('اجتماع مركزي',true);
+    // استحواذ
+    if(S.company){S.company.track=new Array(365).fill(9000);S.company.lastYearProfit=365*9000;S.company.cash=120000;
+      maOffer();ok('عرض استحواذ يظهر',$('modalBg').classList.contains('on')&&maPending>0);
+      const cashA=S.cash;maAccept();
+      ok('قبول الاستحواذ',!S.company&&S.cash>cashA);
+    }
+    // مظهر
+    $('btnTheme').click();ok('مظهر فاتح',document.body.classList.contains('light'));
+    $('btnTheme').click();ok('مظهر داكن',!document.body.classList.contains('light'));
+    // مشاركة
+    try{shareResult();ok('مشاركة النتيجة',true);}catch(e){ok('مشاركة النتيجة',false);}
+    // إفلاس وتجدد
+    S.assets['س:اتصالاتنا'].price=S.assets['س:اتصالاتنا'].base*0.05;
+    worldRenewal();
+    ok('إفلاس شركة',!S.assets['س:اتصالاتنا']&&S.bankruptcies>0);
+    const stc0=Object.keys(S.assets).filter(k=>S.assets[k].kind==='stock').length;
+    S.day=18;worldRenewal();
+    ok('اكتتاب جديد يعوض',Object.keys(S.assets).filter(k=>S.assets[k].kind==='stock').length>=stc0);
+    // مهام
+    rollQuests();ok('مهام تولدت',S.quests.length===3);
+    const q=S.quests.find(x=>x.k==='cash');
+    if(q){S.cash=q.n+1;const cB=S.cash;checkQuests();ok('إنجاز مهمة بمكافأة',q.done===1);}
+    else{S.cash+=1e6;checkQuests();ok('إنجاز مهمة بمكافأة',S.quests.some(x=>x.done));}
+    // مستشار
+    advisor();ok('مستشار آلي',$('modalBg').classList.contains('on'));hideModal();
     save();ok('حفظ',!!localStorage.getItem('econLive1'));
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
   }catch(e){out.push('ERROR '+(e&&e.message));}
