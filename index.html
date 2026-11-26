@@ -273,8 +273,13 @@ tr.row:hover,tr.row.sel{background:#182442}
     </tr></thead><tbody></tbody></table></div>
     <div id="pfEmpty" style="color:var(--dim);font-size:13.5px;padding:8px">لا تملك شيئًا بعد. ابدأ الشراء من صفحة السوق.</div>
   </div>
-  <div class="card"><h3>أداء الثروة <button class="btnGhost" id="btnShare" style="float:left;font-size:12px">📤 شارك نتيجتك</button></h3><canvas id="nwChart" style="width:100%;height:160px;display:block"></canvas></div>
+  <div class="card"><h3>أداء الثروة <button class="btnGhost" id="btnShare" style="float:left;font-size:12px">📤 شارك نتيجتك</button></h3><canvas id="nwChart" style="width:100%;height:160px;display:block"></canvas><div id="benchBar" style="margin-top:8px"></div></div>
   <div class="card"><h3>📅 توزيعات الأرباح</h3><div id="divCal"></div></div>
+  <div class="card"><h3>💾 نسخة احتياطية من حفظك</h3>
+    <p style="font-size:12.5px;color:var(--dim);margin-bottom:8px">صدّر حفظك كنص واحتفظ بيه، أو استورد حفظ قديم.</p>
+    <div class="tradeRow"><button class="btnGhost" id="btnExp">📤 تصدير الحفظ</button><button class="btnGhost" id="btnImp">📥 استيراد</button></div>
+    <textarea id="impTxt" style="width:100%;height:54px;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px;font-size:11px;margin-top:6px" placeholder="الصق نص الحفظ هنا ثم اضغط استيراد"></textarea>
+  </div>
   <div class="grid2">
     <div class="card"><h3>توزيع ممتلكاتك</h3><canvas id="donut" style="width:180px;height:180px;display:block;margin:0 auto"></canvas><div id="donutLeg" style="font-size:12px;color:var(--dim);margin-top:8px"></div></div>
     <div class="card" id="weeklyCard">
@@ -1113,16 +1118,37 @@ function startWeekly(){
     save();showPage('market');renderAll();
   };
 }
+const SCEN=[
+ {id:'crash',n:'💥 أزمة مالية ٢٠٠٨',desc:'انهيار تدريجي — مزاج سلبي وتقلب مضاعف. النجاة إنجاز.',seed:2008,mood:-0.6,vol:2},
+ {id:'boom',n:'🚀 طفرة كريبتو ٢٠٢١',desc:'حمّى عملات رقمية ومزاج محتدم — ركوب الموجة فن.',seed:2021,mood:0.45,vol:1.4},
+ {id:'stag',n:'🐌 ركود السبعينات',desc:'سوق راكد بلا اتجاه — اختبار صبر المستثمر الحقيقي.',seed:1970,mood:-0.12,vol:0.5}
+];
+function startScenario(i){
+  const sc=SCEN[i];
+  showModal('<h2>'+sc.n+'</h2><p style="line-height:1.9">'+sc.desc+'<br>سوق حتمي بذرة <b>#'+sc.seed+'</b> — ١٠ أيام من ١٠٠ ألف، والنتيجة كود تحدٍ. لعبتك الحالية تتحفظ وترجع.</p><div class="tradeRow"><button id="btnScnYes">ابدأ السيناريو</button></div>');
+  $('btnScnYes').onclick=()=>{
+    try{localStorage.setItem('econBackup1',JSON.stringify(S));}catch(e){}
+    RNG=mulberry32(sc.seed);
+    const st=freshState();
+    st.weekly={seed:sc.seed,endDay:11,scn:i};
+    st.mood=sc.mood;st.moodHist=[sc.mood];
+    Object.keys(st.assets).forEach(k=>{st.assets[k].vol*=sc.vol;});
+    S=st;hideModal();
+    toast(sc.n+' بدأ! ١٠ أيام');beep(1100,.2);
+    save();showPage('market');renderAll();
+  };
+}
 function finishWeekly(){
   const score=Math.round(netWorth());
   const code='W'+S.weekly.seed+'-'+score.toString(36).toUpperCase();
   S.hof.push({seed:S.weekly.seed,score:score});
   S.hof.sort((a,b)=>b.score-a.score);S.hof=S.hof.slice(0,5);
   const seed=S.weekly.seed;
+  const scnT=S.weekly.scn!=null?SCEN[S.weekly.scn].n:'🏁 تحدي الأسبوع';
   S.weekly=null;
   RNG=Math.random.bind(Math);
   let backup=null;try{const b=localStorage.getItem('econBackup1');if(b)backup=JSON.parse(b);}catch(e){}
-  showModal('<h2>🏁 انتهى تحدي الأسبوع!</h2><p style="line-height:1.9">نتيجتك: <b>'+fmtD(score)+'</b> من 100 ألف في 10 أيام.<br>كود التحدي: <b style="color:var(--gold)">'+code+'</b><br>شارك الكود مع أصحابك وقارنوا — نفس السوق، مين أحسن مستثمر؟</p><div class="tradeRow"><button id="btnWeeklyBack">ارجع للعبتي المحفوظة</button></div>');
+  showModal('<h2>'+scnT+' — انتهى!</h2><p style="line-height:1.9">نتيجتك: <b>'+fmtD(score)+'</b> من 100 ألف في 10 أيام.<br>كود التحدي: <b style="color:var(--gold)">'+code+'</b><br>شارك الكود مع أصحابك وقارنوا — نفس السوق، مين أحسن مستثمر؟</p><div class="tradeRow"><button id="btnWeeklyBack">ارجع للعبتي المحفوظة</button></div>');
   $('btnWeeklyBack').onclick=()=>{
     if(backup){S=backup;migrate();}
     hideModal();save();renderAll();
@@ -1133,11 +1159,14 @@ function renderWeekly(){
   const el=$('weeklyBody');if(!el)return;
   if(!S.weekly){
     const hofHtml=S.hof&&S.hof.length?'<div style="font-size:12.5px;margin-bottom:8px">🏆 قاعة المشاهير:<br>'+S.hof.map((h,i)=>(i+1)+'. '+fmtD(h.score)+' (أسبوع #'+h.seed+')').join('<br>')+'</div>':'';
-    el.innerHTML='<p style="font-size:13px;color:var(--dim);margin-bottom:8px">نفس السوق لكل اللاعبين هذا الأسبوع (بذرة #'+weekSeed()+'). 10 أيام من 100 ألف — النتيجة كود تتحدى بيه أصحابك. لعبتك الحالية تتحفظ وترجع.</p>'+hofHtml+'<div class="tradeRow"><button class="btnShort" id="btnWeekly">ابدأ تحدي الأسبوع</button></div>';
+    el.innerHTML='<p style="font-size:13px;color:var(--dim);margin-bottom:8px">نفس السوق لكل اللاعبين هذا الأسبوع (بذرة #'+weekSeed()+'). 10 أيام من 100 ألف — النتيجة كود تتحدى بيه أصحابك. لعبتك الحالية تتحفظ وترجع.</p>'+hofHtml+'<div class="tradeRow"><button class="btnShort" id="btnWeekly">ابدأ تحدي الأسبوع</button></div>'+
+    '<p style="font-size:12.5px;color:var(--dim);margin:10px 0 4px">أو جرّب سيناريو تاريخيًا:</p><div class="tradeRow">'+SCEN.map((s,i)=>'<button class="btnGhost scnBtn" data-i="'+i+'" title="'+s.desc+'">'+s.n+'</button>').join('')+'</div>';
     $('btnWeekly').onclick=startWeekly;
+    el.querySelectorAll('.scnBtn').forEach(b=>b.onclick=()=>startScenario(+b.dataset.i));
   }else{
     const left=S.weekly.endDay-S.day;
-    el.innerHTML='<p style="font-size:13px">🏁 تحدي الأسبوع جارٍ — بذرة <b>#'+S.weekly.seed+'</b> — متبقٍ <b>'+left+'</b> يوم — ثروتك <b>'+fmtD(netWorth())+'</b></p>';
+    const scnName=S.weekly.scn!=null?SCEN[S.weekly.scn].n:'🏁 تحدي الأسبوع';
+    el.innerHTML='<p style="font-size:13px">'+scnName+' جارٍ — بذرة <b>#'+S.weekly.seed+'</b> — متبقٍ <b>'+left+'</b> يوم — ثروتك <b>'+fmtD(netWorth())+'</b></p>';
   }
 }
 function renderAutopilot(){
@@ -1586,7 +1615,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();}
 
 /* تبويبات */
 function showPage(p){
@@ -2035,6 +2064,36 @@ function closeMargin(forced){
   S.cash+=equity;
   S.marginPos=null;
   return equity;
+}
+function renderBench(){
+  const el=$('benchBar');if(!el)return;
+  let s=0,n=0;
+  Object.keys(S.assets).forEach(k=>{const a=S.assets[k];if(a.kind==='stock'&&a.hist.length&&a.hist[0]>0){s+=a.price/a.hist[0]-1;n++;}});
+  const mkt=n?s/n*100:0;
+  const you=(netWorth()/100000-1)*100;
+  const beat=you>=mkt;
+  el.innerHTML='<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px;align-items:center">'+
+  '<span>أداؤك: <b class="chg '+(you>=0?'up':'dn')+'">'+(you>=0?'+':'')+you.toFixed(1)+'%</b></span>'+
+  '<span>السوق: <b class="chg '+(mkt>=0?'up':'dn')+'">'+(mkt>=0?'+':'')+mkt.toFixed(1)+'%</b></span>'+
+  '<span class="badge" style="background:'+(beat?'#14532d':'#3f1d1d')+';color:'+(beat?'#86efac':'#fca5a5')+'">'+(beat?'🔥 متفوق على السوق':'🐢 متأخر عن السوق')+'</span></div>';
+}
+function renderBackup(){
+  const be=$('btnExp');if(!be)return;
+  be.onclick=()=>{
+    const t=JSON.stringify(S);
+    $('impTxt').value=t;
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(()=>toast('💾 الحفظ اتنسخ — احتفظ بيه في مكان آمن'),()=>toast('💾 الحفظ في الصندوق تحت — انسخه يدويًا'));
+    else toast('💾 الحفظ في الصندوق تحت — انسخه يدويًا');
+  };
+  $('btnImp').onclick=()=>{
+    try{
+      const o=JSON.parse($('impTxt').value);
+      if(!o||!o.assets||o.cash==null)throw 0;
+      try{localStorage.setItem('econBackup1',JSON.stringify(S));}catch(e){}
+      S=o;migrate();save();renderAll();
+      toast('📥 تم استيراد الحفظ بنجاح');
+    }catch(e){toast('❌ نص حفظ غير صالح');}
+  };
 }
 function renderGEvent(){
   const cd=$('gEventCard');if(!cd)return;
@@ -2721,6 +2780,19 @@ if(location.hash==='#test'){
     const cm1=S.cash;endOfDay();
     ok('تصفية هامش إجبارية',S.marginPos===null);
     ok('أرقام قياسية تتجدد',S.recPeak>=100000);
+    // سيناريوهات تاريخية
+    renderWeekly();
+    document.querySelector('.scnBtn').click();
+    $('btnScnYes').click();
+    ok('سيناريو يبدأ بسوق مزروع',!!S.weekly&&S.weekly.scn===0&&S.mood<0);
+    S.day=S.weekly.endDay;finishWeekly();
+    ok('نهاية السيناريو',S.weekly===null);$('btnWeeklyBack').click();
+    // المقارنة بالسوق + النسخ الاحتياطي
+    renderBench();ok('مقارنة بالسوق',$('benchBar').innerHTML.includes('السوق'));
+    renderBackup();$('btnExp').click();
+    ok('تصدير الحفظ',$('impTxt').value.includes('"assets"'));
+    const day0x=S.day;$('btnImp').click();
+    ok('استيراد الحفظ',S.day===day0x);
     save();ok('حفظ',!!localStorage.getItem('econLive1'));
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
   }catch(e){out.push('ERROR '+(e&&e.message));}
