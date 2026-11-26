@@ -280,6 +280,9 @@ tr.row:hover,tr.row.sel{background:#182442}
         <button class="btnGhost" id="btnWithdraw">سحب ١٠٬٠٠٠ من الشركة</button>
         <button class="btnShort hidden" id="btnIPO">📢 اطرح ٣٠٪ للاكتتاب العام</button>
       </div>
+      <h3 style="margin-top:14px">🌍 فروع حول العالم</h3>
+      <p style="font-size:12.5px;color:var(--dim);margin:4px 0 8px">افتح فروعًا في مدن العالم؛ كل فرع يكسب يوميًا حسب اقتصاد مدينته (طفرة 🔥 / عادي / كساد 🧊).</p>
+      <div id="branchList"></div>
       <h3 style="margin-top:14px">ترقيات الشركة</h3>
       <div class="tradeRow" id="upgRow"></div>
     </div>
@@ -359,6 +362,10 @@ const rnd=(a,b)=>a+Math.random()*(b-a);
 const gauss=()=> (Math.random()+Math.random()+Math.random()+Math.random()-2)/1.0;
 
 const SECTORS=['تقنية','طاقة','أغذية','بنوك','نقل','أدوية','عقارات','تجزئة'];
+const CITIES=[
+  {n:'القاهرة',cost:50000,mult:1.0},{n:'الرياض',cost:120000,mult:1.3},{n:'دبي',cost:150000,mult:1.45},
+  {n:'لندن',cost:250000,mult:1.7},{n:'طوكيو',cost:280000,mult:1.75},{n:'نيويورك',cost:320000,mult:1.9},
+];
 const GLOBAL_EVENTS=[
   {ic:'⚔️',n:'حرب تجارية عالمية',days:3,eff:{'*':-1.1},gold:true,msg:'هروب نحو الملاذات الآمنة والذهب'},
   {ic:'🛢️',n:'طفرة نفطية',days:3,eff:{'طاقة':2.6,'نقل':-0.8},msg:'أسهم الطاقة تتضخم والنقل يتضرر'},
@@ -430,7 +437,7 @@ function freshState(){
   st.theme='dark';st.bubbles={};st.offers=0;st.quests=[];st.questDay=0;st.bankruptcies=0;
   st.lotto={pool:20000,tickets:0};st.moodHist=[0.15];st.sortKey=null;
   st.notifs=[];st.splits=0;
-  st.prestige=0;st.gEvent=null;
+  st.prestige=0;st.gEvent=null;st.cityStatus={};
   pushNews(st,'افتتاح السوق العالمية للمحاكاة — حظ موفق أيها المستثمر!',0,false);
   return st;
 }
@@ -455,6 +462,7 @@ function migrate(){
   if(S.sortKey===undefined)S.sortKey=null;
   if(!S.notifs)S.notifs=[];if(!S.splits)S.splits=0;
   if(!S.prestige)S.prestige=0;if(S.gEvent===undefined)S.gEvent=null;
+  if(!S.cityStatus)S.cityStatus={};
 }
 function pushNews(st,text,impact,hot,good){
   st.news.unshift({d:st.day,h:st.hour,text,hot:!!hot,good:!!good});
@@ -548,6 +556,17 @@ function endOfDay(){
     toast(e.ic+' حدث عالمي: '+e.n);beep(900,.2);
   }
   renderGEvent();
+  // اقتصادات المدن تتغير
+  CITIES.forEach(ct=>{
+    const cur=S.cityStatus[ct.n]||'normal';
+    if(Math.random()<0.10){
+      const nx=Math.random()<0.35?'boom':Math.random()<0.5?'bust':'normal';
+      if(nx!==cur){
+        S.cityStatus[ct.n]=nx;
+        if(nx!=='normal')pushNews(S,(nx==='boom'?'🔥 طفرة اقتصادية في ':'🧊 كساد يضرب ')+ct.n,0,nx==='boom',nx==='boom');
+      }
+    }
+  });
   // توزيعات أرباح الأسهم
   let divSum=0;
   for(const k in S.assets){const a=S.assets[k];
@@ -715,6 +734,17 @@ function runCompany(){
   const costs=wageBill+c.rd+c.marketing+sold*c.price*0.35;
   const profit=revenue-costs;
   const pFinal=profit>0?profit*pmult():profit;
+  // أرباح الفروع حول العالم
+  let branchProfit=0;
+  if(c.branches&&c.branches.length){
+    c.branches.forEach(b=>{
+      const city=CITIES.find(x=>x.n===b.city);if(!city)return;
+      const f=b.status==='boom'?1.6:b.status==='bust'?0.35:1;
+      branchProfit+=Math.round(4000*b.lvl*city.mult*f-1500*b.lvl);
+    });
+    c.cash+=branchProfit;
+  }
+  c.branchProfit=branchProfit;
   c.cash+=pFinal;
   c.todayRev=revenue;c.todayProfit=pFinal;c.todaySold=Math.round(sold);
   c.quality=Math.min(100,c.quality+c.rd/4000+c.up.auto*0.05);
@@ -1190,7 +1220,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();}
 
 /* تبويبات */
 function showPage(p){
@@ -1258,6 +1288,45 @@ $('btnLotto').onclick=()=>{
 function renderLotto(){
   $('lottoPool').textContent=fmtD(S.lotto.pool);
   $('lottoT').textContent=S.lotto.tickets;
+}
+function renderBranches(){
+  const el=$('branchList');if(!el)return;
+  const c=S.company;
+  if(!c){el.innerHTML='';return;}
+  if(!c.branches)c.branches=[];
+  el.innerHTML=CITIES.map(ct=>{
+    const b=c.branches.find(x=>x.city===ct.n);
+    const stt=S.cityStatus[ct.n]||'normal';
+    const ic=stt==='boom'?'🔥':stt==='bust'?'🧊':'🏙️';
+    if(b){
+      const upCost=Math.round(ct.cost*0.6*b.lvl);
+      return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:7px 0;border-bottom:1px solid var(--line)"><span>'+ic+' <b>'+ct.n+'</b> — مستوى '+b.lvl+'</span><button class="btnGhost" data-up="'+ct.n+'" '+(c.cash<upCost?'disabled':'')+'>ترقية ('+fmtD(upCost)+')</button></div>';
+    }
+    return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:7px 0;border-bottom:1px solid var(--line)"><span>'+ic+' '+ct.n+' <span style="color:var(--dim)">×'+ct.mult+'</span></span><button class="btnShort" data-open="'+ct.n+'" '+(c.cash<ct.cost?'disabled':'')+'>افتح فرع ('+fmtD(ct.cost)+')</button></div>';
+  }).join('');
+  el.querySelectorAll('[data-open]').forEach(bt=>bt.onclick=()=>openBranch(bt.dataset.open));
+  el.querySelectorAll('[data-up]').forEach(bt=>bt.onclick=()=>upgradeBranch(bt.dataset.up));
+}
+function openBranch(cityN){
+  const c=S.company,ct=CITIES.find(x=>x.n===cityN);
+  if(!c||!ct)return;
+  if(c.cash<ct.cost)return toast('❌ خزينة الشركة لا تكفي');
+  c.cash-=ct.cost;
+  if(!c.branches)c.branches=[];
+  c.branches.push({city:cityN,lvl:1});
+  toast('🌍 فرع جديد في '+cityN+'!');beep(950,.12);
+  pushNews(S,'🌍 '+c.name+' تفتتح فرعًا في '+cityN,0,true,true);
+  save();renderBranches();renderCompany();
+}
+function upgradeBranch(cityN){
+  const c=S.company,ct=CITIES.find(x=>x.n===cityN);
+  const b=c&&c.branches?c.branches.find(x=>x.city===cityN):null;
+  if(!b)return;
+  const upCost=Math.round(ct.cost*0.6*b.lvl);
+  if(c.cash<upCost)return toast('❌ خزينة الشركة لا تكفي');
+  c.cash-=upCost;b.lvl++;
+  toast('⬆️ فرع '+cityN+' أصبح مستوى '+b.lvl);beep(800,.1);
+  save();renderBranches();renderCompany();
 }
 function renderGEvent(){
   const cd=$('gEventCard');if(!cd)return;
@@ -1710,6 +1779,19 @@ if(location.hash==='#test'){
     $('btnPrestige').click();$('btnPrestigeYes').click();
     ok('بدء كأسطورة',S.prestige===1&&S.cash>=150000&&pmult()>1.1);
     ok('إنجازات محفوظة',typeof S.achv==='object');
+    // فروع الشركة
+    S.company={name:'شركة الفروع',sector:'تقنية',cash:500000,price:40,rd:200,marketing:300,workers:20,quality:10,track:[],lastYearProfit:0,todayRev:0,todayProfit:0,todaySold:0,up:{line:0,auto:0,brand:0},branches:[]};
+    renderBranches();
+    ok('قائمة الفروع تظهر',$('branchList').innerHTML.includes('دبي'));
+    openBranch('دبي');
+    ok('فتح فرع',S.company.branches.length===1&&S.company.cash<500000);
+    const bLvl=S.company.branches[0].lvl;upgradeBranch('دبي');
+    ok('ترقية فرع',S.company.branches[0].lvl===bLvl+1);
+    S.cityStatus['دبي']='boom';
+    const bc0=S.company.cash;runCompany();
+    ok('فرع يكسب وقت الطفرة',S.company.branchProfit>0);
+    S.cityStatus['دبي']='bust';runCompany();
+    ok('الكساد يقلل مكسب الفرع',S.company.branchProfit<4000*2*1.45);
     save();ok('حفظ',!!localStorage.getItem('econLive1'));
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
   }catch(e){out.push('ERROR '+(e&&e.message));}
