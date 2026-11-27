@@ -409,6 +409,10 @@ tr.row:hover,tr.row.sel{background:#182442}
       <p style="font-size:12.5px;color:var(--dim);margin:4px 0 8px">شركات صغيرة معروضة للبيع. الصفقة الناجحة توسّع طاقتك وتضيف عمالًا وجودة؛ والفاشلة تخسّرك رسومها (٣٪).</p>
       <div id="acqBody"></div>
     </div>
+    <div class="card" id="brandCard">
+      <h3>🎯 العلامة التجارية والحملات</h3>
+      <div id="brandBody"></div>
+    </div>
     <div class="card" id="confCard">
       <h3>🎤 مؤتمر صحفي (للشركات المدرجة)</h3>
       <div id="confBody"></div>
@@ -618,6 +622,8 @@ function migrate(){
     if(!S.company.staff)S.company.staff={eng:0,sales:0,mkt:0};
     STAFF.forEach(x=>{if(S.company.staff[x.k]==null)S.company.staff[x.k]=0;});
     if(!S.company.hist)S.company.hist=[];
+    if(S.company.brand==null)S.company.brand=10;
+    if(S.company.campaign===undefined)S.company.campaign=null;
   }
   if(!S.stats)S.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};
   if(S.stats.worstTrade==null)S.stats.worstTrade=0;
@@ -1134,6 +1140,16 @@ function runCompany(){
     }
   }
   const strikeF=c.strike?0.35:1;
+  if(c.brand==null)c.brand=10;
+  if(c.campaign){
+    c.campaign.left--;
+    if(c.campaign.left<=0){
+      pushNews(S,'انتهت '+c.campaign.n+' لـ"'+c.name+'"',0,false,true);
+      toast('انتهت '+c.campaign.n);c.campaign=null;
+    }
+  }
+  c.brand=Math.max(0,Math.min(100,c.brand+(c.campaign?0.15:0.02)-0.05));
+  const campF=1+(c.campaign?c.campaign.boost:0);
   const prod=0.72+c.morale/100*0.56;
   const sectorMood=avgSectorSent(c.sector);
   const fairPrice=40*(1+sectorMood)+c.quality*1.5;
@@ -1143,7 +1159,7 @@ function runCompany(){
   // المنافس يضغط على الطلب
   const rivalF=S.rival?Math.max(0.5,1-S.rival.strength*0.16):1;
   const salesBoost=1+(c.staff.sales||0)*0.08;
-  const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rivalF*salesBoost*strikeF*prod*rnd(0.85,1.15));
+  const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rivalF*salesBoost*strikeF*campF*(1+c.brand/400)*prod*rnd(0.85,1.15));
   const sold=Math.min(demand,c.workers*10*capacity*prod);
   const revenue=sold*c.price;
   const wageBill=c.workers*22*c.wage;
@@ -1813,6 +1829,42 @@ function renderCompany(){
   $('vWk').textContent=c.workers;
   $('sPrice').value=c.price;$('sRd').value=c.rd;$('sMk').value=c.marketing;$('sWk').value=c.workers;
 }
+const CAMPS=[
+ {k:'social',n:'حملة سوشيال ميديا',ic:'📱',cost:15000,days:6,boost:0.15},
+ {k:'tv',n:'حملة تلفزيونية',ic:'📺',cost:50000,days:10,boost:0.35},
+ {k:'sponsor',n:'رعاية رياضية كبرى',ic:'🏟️',cost:120000,days:20,boost:0.6}
+];
+function startCamp(k){
+  const c=S.company;if(!c)return toast('أسّس شركة أولًا');
+  const d=CAMPS.find(x=>x.k===k);if(!d)return;
+  if(c.campaign)return toast('عندك حملة شغّالة بالفعل');
+  if(c.cash<d.cost)return toast('❌ خزينة الشركة لا تكفي ('+fmtD(d.cost)+')');
+  c.cash-=d.cost;c.campaign={k:k,n:d.n,ic:d.ic,left:d.days,boost:d.boost};
+  pushNews(S,'🎯 "'+c.name+'" أطلقت '+d.n+' بميزانية '+fmtD(d.cost),0.01,false,true);
+  toast('🎯 بدأت '+d.n);
+  renderBrand();renderCompany();
+}
+function renderBrand(){
+  const b=$('brandBody');if(!b)return;
+  const c=S.company;
+  if(!c){b.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا لتشغيل الحملات.</div>';return;}
+  if(c.brand==null)c.brand=10;
+  const br=Math.round(c.brand);
+  const col=br>=60?'var(--up)':br>=30?'#f59e0b':'var(--dim)';
+  let h='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0"><span>قيمة العلامة التجارية</span><b style="color:'+col+'">'+br+'/100</b></div>';
+  h+='<div style="height:9px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:4px 0 10px"><div style="height:100%;width:'+br+'%;background:'+col+'"></div></div>';
+  if(c.campaign){
+    h+='<div style="background:rgba(59,130,246,.12);border:1px solid var(--accent);border-radius:12px;padding:10px;margin-bottom:10px">'+
+      '<b>'+c.campaign.ic+' '+c.campaign.n+'</b> — باقي '+c.campaign.left+' يوم<br>'+
+      '<span style="color:var(--dim);font-size:12px">الطلب +'+Math.round(c.campaign.boost*100)+'% · العلامة بتكبر أسرع</span></div>';
+  }
+  CAMPS.forEach(d=>{
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap">'+
+      '<span>'+d.ic+' <b>'+d.n+'</b><br><span style="color:var(--dim);font-size:12px">'+fmtD(d.cost)+' · '+d.days+' يوم · طلب +'+Math.round(d.boost*100)+'%</span></span>'+
+      '<button class="btnGhost" onclick="startCamp(\''+d.k+'\')" '+((c.campaign||c.cash<d.cost)?'disabled':'')+'>أطلق</button></div>';
+  });
+  b.innerHTML=h;
+}
 const ACQ_NAMES=['مصنع الواحة','شركة النور','مجموعة الدلتا','تقنيات المتوسط','مزارع النيل','شبكة الشروق','معامل الشفاء','أسواق الحرية'];
 function genAcq(){
   const list=[];
@@ -1976,7 +2028,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();renderHR();renderPerf();renderAcq();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();renderHR();renderPerf();renderAcq();renderBrand();}
 
 /* تبويبات */
 function showPage(p){
@@ -3412,6 +3464,29 @@ if(location.hash==='#test'){
       ok('لا إعادة شراء لصفقة منتهية',cc.cash===cQ);
       S.day=S.acq.next;const nx0=S.acq.next;endOfDay();
       ok('عرض استحواذ جديد يتولد',S.acq.next===nx0+12&&S.acq.list.every(t=>!t.done));
+      // العلامة التجارية والحملات
+      cc.cash=300000;cc.campaign=null;cc.brand=10;
+      renderBrand();ok('بطاقة العلامة تعرض',$('brandBody').innerHTML.includes('قيمة العلامة التجارية'));
+      cc.cash=1000;startCamp('social');
+      ok('حملة بدون كاش مرفوض',cc.campaign===null&&cc.cash===1000);
+      cc.cash=300000;startCamp('social');
+      ok('حملة تبدأ وتخصم الميزانية',cc.campaign&&cc.campaign.left===6&&cc.cash===285000);
+      startCamp('tv');
+      ok('حملة واحدة في نفس الوقت',cc.campaign.k==='social');
+      const Rb=RNG;RNG=()=>0.5;
+      for(const kk in S.assets){if(S.assets[kk].kind==='stock')S.assets[kk].sent=0;}
+      cc.workers=60;cc.price=200;cc.quality=40;cc.rd=0;cc.marketing=0;cc.staff={eng:0,sales:0,mkt:0};cc.strike=null;cc.morale=60;
+      cc.campaign=null;cc.brand=10;runCompany();const sPlain=cc.todaySold;
+      cc.campaign={k:'tv',n:'حملة تلفزيونية',ic:'📺',left:5,boost:0.35};cc.brand=10;runCompany();const sCamp=cc.todaySold;
+      RNG=Rb;
+      ok('الحملة ترفع الطلب',sCamp>sPlain);
+      cc.campaign={k:'social',n:'حملة سوشيال',ic:'📱',left:1,boost:0.15};
+      runCompany();
+      ok('الحملة تنتهي بعد مدتها',cc.campaign===null);
+      cc.brand=10;cc.campaign={k:'tv',n:'حملة',ic:'📺',left:5,boost:0.35};runCompany();
+      ok('العلامة تكبر أثناء الحملة',cc.brand>10);
+      cc.campaign=null;cc.brand=100;for(let i=0;i<3;i++)runCompany();
+      ok('العلامة محصورة ٠-١٠٠',cc.brand<=100&&cc.brand>=0);
       const keepC=S.company;
       S.company={name:'قديمة',sector:'تقنية',cash:1000,price:40,rd:0,marketing:0,workers:10,quality:10,track:[]};
       migrate();
