@@ -137,6 +137,7 @@ function migrate(){
     if(S.company.crisis===undefined)S.company.crisis=null;
     if(!S.company.inv)S.company.inv=invDef();
     if(!S.company.ipo)S.company.ipo={listed:false};
+    if(!S.company.sup)S.company.sup={active:null,offers:[],history:[],deals:0};
   }
   if(!S.stats)S.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};
   if(S.stats.worstTrade==null)S.stats.worstTrade=0;
@@ -695,18 +696,26 @@ function runCompany(){
   const salesBoost=1+(c.staff.sales||0)*0.08;
   const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rivalF*salesBoost*strikeF*campF*crisisF*repF*(1+c.brand/400)*prod*rnd(0.85,1.15));
   if(!c.inv)c.inv=invDef();
+  supTick();
   const production=c.workers*8*capacity*prod*(c.strike?0.35:1);
   c.inv.units=Math.min(c.inv.cap,c.inv.units+production);
   if(c.inv.order){
     c.inv.order.left--;
     if(c.inv.order.left<=0){
-      const add=Math.min(c.inv.order.units,Math.max(0,c.inv.cap-c.inv.units));
-      c.inv.units+=add;c.inv.order=null;
-      toast('🚚 وصلت شحنة الموردين ('+Math.round(add)+' وحدة)');
+      const supRel=(c.sup&&c.sup.active)?c.sup.active.reliability:1;
+      if(!c.inv.order.rolled){
+        c.inv.order.rolled=1;
+        if(RNG()>supRel){c.inv.order.left=1+Math.floor(RNG()*2);toast('⏳ شحنة "'+c.sup.active.name+'" اتأخرت');}
+      }
+      if(c.inv.order.left<=0){
+        const add=Math.min(c.inv.order.units,Math.max(0,c.inv.cap-c.inv.units));
+        c.inv.units+=add;c.inv.order=null;
+        toast('🚚 وصلت شحنة الموردين ('+Math.round(add)+' وحدة)');
+      }
     }
   }
   if(c.inv.auto&&!c.inv.order&&c.inv.units<c.inv.cap*0.25){
-    const cost=1000*3;
+    const cost=Math.round(1000*supCost());
     if(c.cash>=cost){c.cash-=cost;c.inv.order={units:1000,left:3};toast('🔁 طلب تلقائي: شحنة 1000 وحدة');}
   }
   const sold=Math.min(demand,c.inv.units);
@@ -1365,4 +1374,83 @@ function renderBank(){
     kpi('النمو الاقتصادي',gdp.toFixed(1)+'%')+kpi('التضخم',(S.infl*100).toFixed(1)+'%')+
     kpi('الفائدة',(S.rate*100).toFixed(1)+'%')+kpi('ثقة المستهلك',(60+S.mood*40).toFixed(0)+'/100')+
     kpi('🏦 اجتماع المركزي القادم','يوم '+nextCB)+kpi('💥 فقاعات محتملة',Object.values(S.bubbles).filter(v=>v>2).length||'لا شيء');
-     }
+}
+function kpi(l,v){return '<div class="kpi"><b>'+v+'</b><span>'+l+'</span></div>';}
+function renderCompany(){
+  const c=S.company;
+  $('coFound').classList.toggle('hidden',!!c);
+  $('coPanel').classList.toggle('hidden',!c);
+  if(!c)return;
+  $('coTitle').textContent=c.name+' — قطاع '+c.sector;
+  $('coKpis').innerHTML=
+    kpi('خزينة الشركة',fmtD(c.cash))+kpi('قيمة الشركة',fmtD(companyValue()))+
+    kpi('مبيعات اليوم',c.todaySold||0)+kpi('ربح اليوم',fmtD(c.todayProfit||0))+
+    kpi('الجودة',c.quality.toFixed(0)+'/100')+kpi('العمال',c.workers)+
+    kpi('رضا الفريق',Math.round(c.morale)+'%')+kpi('طاقم الإدارة',staffLevel(c)+'/15');
+  $('vPrice').textContent=c.price+' د.';
+  $('vRd').textContent=fmtD(c.rd);
+  $('vMk').textContent=fmtD(c.marketing);
+  $('vWk').textContent=c.workers;
+  $('sPrice').value=c.price;$('sRd').value=c.rd;$('sMk').value=c.marketing;$('sWk').value=c.workers;
+}
+const RIVAL_CORPS=['مجموعة الشرق','نور القابضة','الاتحاد الصناعي','دلتا تكنولوجيز','البحر الأحمر للصناعة'];
+function initCorp(){
+  if(S.corp&&S.corp.length)return;
+  S.corp=RIVAL_CORPS.map(n=>({n:n,rep:Math.round(rnd(40,80)),brand:Math.round(rnd(35,80)),value:Math.round(rnd(250000,1500000))}));
+}
+function corpRows(){
+  initCorp();
+  const rows=S.corp.map(c=>({n:c.n,rep:Math.round(c.rep),brand:Math.round(c.brand),value:Math.round(c.value),me:false}));
+  if(S.company)rows.push({n:S.company.name+' (أنت)',rep:Math.round(S.company.rep==null?50:S.company.rep),brand:Math.round(S.company.brand==null?10:S.company.brand),value:Math.round(companyValue()),me:true});
+  rows.forEach(r=>{r.score=r.value+r.rep*800+r.brand*600;});
+  rows.sort((a,b)=>b.score-a.score);
+  return rows;
+}
+function marketShare(){
+  const rows=corpRows();
+  const total=rows.reduce((s,r)=>s+r.value,0)||1;
+  const mine=rows.filter(r=>r.me).reduce((s,r)=>s+r.value,0);
+  return {mine:mine/total*100,top:rows[0]?(rows[0].value/total*100):0,rank:rows.findIndex(r=>r.me)+1,total:total};
+}
+function runContest(){
+  const rows=corpRows();
+  if(!rows.length)return;
+  const top=rows[0];const wk=Math.floor(S.day/7);const prize=30000;
+  if(!S.contests)S.contests=[];
+  S.contests.push({w:wk,n:top.n,me:!!top.me,score:Math.round(top.score)});
+  if(S.contests.length>8)S.contests.shift();
+  if(top.me&&S.company){
+    S.company.cash+=prize;
+    S.company.brand=Math.min(100,(S.company.brand==null?10:S.company.brand)+8);
+    pushNews(S,'🏆 "'+S.company.name+'" شركة الأسبوع — جايزة '+fmtD(prize)+' و+8 علامة',0.02,true,true);
+    toast('🏆 شركة الأسبوع! +'+fmtD(prize)+' و+8 علامة');
+  }else{
+    pushNews(S,'🏆 "'+top.n+'" شركة الأسبوع في السوق لهذا الأسبوع',0.005,false,true);
+  }
+}
+function renderCorp(){
+  const b=$('corpBody');if(!b)return;
+  const rows=corpRows();
+  const myIdx=rows.findIndex(r=>r.me);
+  const G='display:grid;grid-template-columns:2.2fr 0.7fr 0.7fr 1.2fr;gap:6px';
+  let h='<div style="'+G+';font-size:12px;color:var(--dim);padding:4px 2px;border-bottom:1px solid var(--line)"><span>الشركة</span><span>سمعة</span><span>علامة</span><span>القيمة</span></div>';
+  rows.forEach((r,i)=>{
+    const bg=r.me?'background:rgba(59,130,246,.12);border-radius:8px;':'';
+    h+='<div style="'+G+';font-size:12.5px;padding:6px 2px;border-bottom:1px solid var(--line);'+bg+'"><span>'+(i+1)+'. '+(r.me?'<b>'+r.n+'</b>':r.n)+'</span><span>'+r.rep+'</span><span>'+r.brand+'</span><span>'+fmtD(r.value)+'</span></div>';
+  });
+  const ms=marketShare();
+  h+='<div style="margin-top:10px;font-size:12.5px;color:var(--dim)">حصة السوق: <b style="color:var(--txt)">'+ms.mine.toFixed(1)+'%</b> · المتصدر '+ms.top.toFixed(1)+'%</div>';
+  h+='<div style="height:8px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:4px 0 6px"><div style="height:100%;width:'+Math.min(100,ms.mine).toFixed(1)+'%;background:var(--accent)"></div></div>';
+  if(S.contests&&S.contests.length){
+    h+='<div style="margin-top:8px;font-size:12px;color:var(--dim)">آخر أبطال الأسبوع: '+S.contests.slice(-3).reverse().map(c=>'<b style="color:'+(c.me?'var(--up)':'var(--txt)')+'">'+c.n+'</b>').join(' · ')+'</div>';
+  }
+  if(myIdx<0){
+    h+='<div style="margin-top:8px;color:var(--dim);font-size:12.5px">أسّس شركة عشان تدخل الترتيب.</div>';
+  }else if(myIdx===0){
+    h+='<div style="margin-top:8px;color:var(--up);font-size:12.5px">👑 أنت رقم ١ في السوق — حافظ على الصدارة</div>';
+  }else{
+    const above=rows[myIdx-1];const need=Math.max(0,above.score-rows[myIdx].score);
+    h+='<div style="margin-top:8px;font-size:12.5px">للصعود مركزًا: محتاج <b>'+fmtD(Math.round(need))+'</b> قوة زيادة على "'+above.n+'" (قيمة + سمعة×800 + علامة×600)</div>';
+  }
+  b.innerHTML=h;
+                   }
