@@ -1,3 +1,15 @@
+function renderBench(){
+  const el=$('benchBar');if(!el)return;
+  let s=0,n=0;
+  Object.keys(S.assets).forEach(k=>{const a=S.assets[k];if(a.kind==='stock'&&a.hist.length&&a.hist[0]>0){s+=a.price/a.hist[0]-1;n++;}});
+  const mkt=n?s/n*100:0;
+  const you=(netWorth()/100000-1)*100;
+  const beat=you>=mkt;
+  el.innerHTML='<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px;align-items:center">'+
+  '<span>أداؤك: <b class="chg '+(you>=0?'up':'dn')+'">'+(you>=0?'+':'')+you.toFixed(1)+'%</b></span>'+
+  '<span>السوق: <b class="chg '+(mkt>=0?'up':'dn')+'">'+(mkt>=0?'+':'')+mkt.toFixed(1)+'%</b></span>'+
+  '<span class="badge" style="background:'+(beat?'#14532d':'#3f1d1d')+';color:'+(beat?'#86efac':'#fca5a5')+'">'+(beat?'🔥 متفوق على السوق':'🐢 متأخر عن السوق')+'</span></div>';
+}
 function renderBackup(){
   const be=$('btnExp');if(!be)return;
   be.onclick=()=>{
@@ -497,6 +509,37 @@ if(location.hash==='#test'){
     S.nextNews={i:0,h:5};S.tipUsed=0;S.cash+=10000;
     $('btnTip').click();
     ok('معلومة مسرّبة',S.tips===1&&$('tipOut').textContent.length>10);
+    
+    if(S.company){
+      const cc=S.company;const dayT=S.day;
+      cc.cash=300000;cc.workers=60;cc.staff={eng:1,sales:1,mkt:1};
+      cc.team={xp:{eng:0,sales:0,mkt:0},lastBonus:-99,bonuses:0,trains:0};
+      cc.morale=60;cc.todayProfit=20000;
+      ok('النجوم تبدأ من صفر',teamStars('eng',cc)===0&&Math.abs(teamMult('eng',cc)-1)<1e-9);
+      teamTick(cc);teamTick(cc);
+      ok('الخبرة تزيد يوميًا',teamOf(cc).xp.eng>0);
+      teamOf(cc).xp.eng=130;
+      ok('نجمتين عند ١٣٠ خبرة',teamStars('eng',cc)===2&&teamMult('eng',cc)>1.2);
+      teamOf(cc).xp.sales=200;
+      ok('نجوم المبيعات ترفع فعالية الفريق',teamEff('sales',cc)>1.4&&teamStars('sales',cc)===3);
+      const xp0=teamOf(cc).xp.mkt,cashT=cc.cash;
+      ok('التدريب يزيد الخبرة ويخصم كاش',trainTeam('mkt')===true&&teamOf(cc).xp.mkt>xp0&&Math.abs(cc.cash-(cashT-6000))<1);
+      cc.cash=1000;
+      ok('التدريب محتاج كاش',trainTeam('mkt')===false);
+      cc.cash=300000;cc.morale=50;
+      ok('المكافأة ترفع الروح المعنوية',payBonus()===true&&cc.morale>50);
+      ok('المكافأة لها كولداون',payBonus()===false);
+      S.day=cc.team.lastBonus+10;const bonus2=payBonus()===true;S.day=dayT;
+      ok('الكولداون بينتهي بعد ١٠ أيام',bonus2);
+      renderHR();ok('بطاقة النجوم ترسم',$('hrBody').innerHTML.includes('نجوم الفريق'));
+      cc.quality=40;cc.rd=0;cc.up={line:0,auto:0,brand:0};cc.staff={eng:1,sales:0,mkt:0};
+      cc.team={xp:{eng:0,sales:0,mkt:0},lastBonus:-99,bonuses:0,trains:0};
+      RNG=()=>0.5;const q0=cc.quality;runCompany();const d0=cc.quality-q0;
+      cc.quality=40;cc.team={xp:{eng:180,sales:0,mkt:0},lastBonus:-99,bonuses:0,trains:0};
+      const q1=cc.quality;runCompany();const d1=cc.quality-q1;
+      ok('النجوم تزوّد إنتاجية الجودة',d1>d0);
+      RNG=Math.random;cc.team={xp:{eng:0,sales:0,mkt:0},lastBonus:-99,bonuses:0,trains:0};
+    }
     
     if(S.company){
       const dayS=S.day;
