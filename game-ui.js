@@ -1,3 +1,21 @@
+function renderBackup(){
+  const be=$('btnExp');if(!be)return;
+  be.onclick=()=>{
+    const t=JSON.stringify(S);
+    $('impTxt').value=t;
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(()=>toast('💾 الحفظ اتنسخ — احتفظ بيه في مكان آمن'),()=>toast('💾 الحفظ في الصندوق تحت — انسخه يدويًا'));
+    else toast('💾 الحفظ في الصندوق تحت — انسخه يدويًا');
+  };
+  $('btnImp').onclick=()=>{
+    try{
+      const o=JSON.parse($('impTxt').value);
+      if(!o||!o.assets||o.cash==null)throw 0;
+      try{localStorage.setItem('econBackup1',JSON.stringify(S));}catch(e){}
+      S=o;migrate();save();renderAll();
+      toast('📥 تم استيراد الحفظ بنجاح');
+    }catch(e){toast('❌ نص حفظ غير صالح');}
+  };
+}
 function econEvents(){
   const ev=[];
   const earn=(10-S.day%10)%10;ev.push({d:earn,t:'📊 موسم الأرباح — مفاجآت تهز الأسعار'});
@@ -479,6 +497,42 @@ if(location.hash==='#test'){
     S.nextNews={i:0,h:5};S.tipUsed=0;S.cash+=10000;
     $('btnTip').click();
     ok('معلومة مسرّبة',S.tips===1&&$('tipOut').textContent.length>10);
+    
+    if(S.company){
+      const dayS=S.day;
+      RNG=()=>0.5;
+      S.company.sup={active:null,offers:[],history:[],deals:0};
+      S.company.cash=200000;S.company.rep=70;S.company.brand=40;
+      const os=genSupOffers();
+      ok('٣ عروض موردين',os.length===3&&os.every(o=>o.unitCost>0&&o.reliability>0&&o.volume>0));
+      const c0=os[0].unitCost;
+      ok('تفاوض عادل يخفّض السعر',negotiateSup(0,'fair')===true&&os[0].unitCost<c0);
+      const c1=os[1].unitCost,q1=os[1].quality;
+      ok('اتفاقية ممتازة ترفع السعر والالتزام',negotiateSup(1,'prem')===true&&os[1].unitCost>c1&&os[1].quality>q1);
+      const c2=os[2].unitCost;
+      ok('تفاوض صارم ينجح مع سمعة عالية',negotiateSup(2,'hard')===true&&os[2].unitCost<c2);
+      const fee=os[0].fee,cashS=S.company.cash;
+      ok('توقيع العقد يخصم الرسوم',signSup(0)===true&&Math.abs(S.company.cash-(cashS-fee))<1&&!!S.company.sup.active);
+      ok('لا عقدين في نفس الوقت',signSup(1)===false);
+      ok('سعر التوريد بقى سعر العقد',Math.abs(supCost()-S.company.sup.active.unitCost)<1e-9);
+      if(!S.company.inv)S.company.inv=invDef();
+      S.company.inv.order=null;S.company.cash=100000;
+      const cashO=S.company.cash;orderStock(1000);
+      ok('الطلب بيستخدم سعر المورد',Math.abs((cashO-S.company.cash)-Math.round(1000*supCost()))<1);
+      const endD=S.company.sup.active.endDay;S.day=endD;supTick();
+      ok('العقد ينتهي بعد المدة',S.company.sup.active===null);
+      S.day=dayS;
+      S.company.sup={active:{name:'مورد اختبار',unitCost:2.5,reliability:0.5,quality:2,volume:800,term:30,endDay:S.day+30,fee:0},offers:[],history:[],deals:0};
+      const inv2=S.company.inv;inv2.order={units:500,left:1};inv2.units=100;
+      RNG=()=>0.99;runCompany();
+      ok('مورد غير ملتزم يأخر الشحنة',!!inv2.order&&inv2.order.left>0);
+      S.company.cash=200000;
+      const cashX=S.company.cash;
+      const pen=Math.round(S.company.sup.active.unitCost*S.company.sup.active.volume*2);
+      ok('فسخ العقد يدفع غرامة',cancelSup()===true&&Math.abs(S.company.cash-(cashX-pen))<1&&S.company.sup.active===null);
+      renderSup();ok('بطاقة الموردين ترسم',$('supBody').innerHTML.length>50);
+      RNG=Math.random;
+    }
     
     if(S.company){
       const day0=S.day;
@@ -1143,4 +1197,4 @@ if(location.hash==='#test'){
   }catch(e){out.push('ERROR '+(e&&e.message));}
   const d=document.createElement('pre');d.id='testout';d.textContent=out.join('\n');document.body.appendChild(d);
   document.title=out.some(l=>l.startsWith('FAIL')||l.startsWith('ERROR'))?'TEST-FAIL':'TEST-OK';
-      }
+  }
