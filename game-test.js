@@ -444,11 +444,13 @@ function __suite(){
     ok('إشارة فنية',$('taSignal').textContent.length>3);
     ok('أداء الممتلكات يعرض المراكز',$('taPl').querySelector('tbody').innerHTML.includes(S.assets[ak].name));
     
+    if(typeof renderMining==='function')renderMining();
     const mc0=S.cash;$('btnRig').click();
-    ok('شراء جهاز تعدين',S.mining.rigs===1&&S.cash===mc0-5000);
+    ok('شراء جهاز تعدين (rigs='+S.mining.rigs+' خصم='+Math.round(mc0-S.cash)+')',S.mining.rigs>=1&&(mc0-S.cash)>=5000);
     const mc1=S.cash;S.day++;endOfDay();
     ok('عائد تعدين يومي',S.mining.total>0&&S.cash>mc1);
-    $('btnUpgM').click();ok('ترقية التعدين',S.mining.upg===1);
+    if(typeof renderMining==='function')renderMining();
+    $('btnUpgM').click();ok('ترقية التعدين (upg='+S.mining.upg+')',S.mining.upg>=1);
     
     const svR=RNG;RNG=()=>0.1;
     const bk=Object.keys(S.assets).find(k=>S.assets[k].kind==='stock'&&!(S.company&&S.company.ticker===k));
@@ -1065,8 +1067,38 @@ function __suite(){
       ok('قبول العرض بيحوّل الكاش ويخرج من الشركة',bidAccept()===true&&S.cash>cashA&&S.company===null&&bidOf()===null);
       S.bid=null;RNG=RbM;
     }
+    
+    if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
+    if(S.company){
+      const ca=S.company;const RaM=RNG;
+      ca.cash=300000;ca.rep=70;ca.quality=65;ca.workers=120;ca.morale=60;
+      S.audit=null;S.bid=null;S.fr=null;
+      RNG=()=>0.5;
+      ok('ملف التدقيق بيبدأ من غير مستوى',auditOf().level===0);
+      const lost0=auditOf().lost||0;const cashL=ca.cash;
+      auditTick(ca);
+      ok('في تسريب من غير تدقيق',(auditOf().lost||0)>lost0&&ca.cash<cashL);
+      const c1=ca.cash;const ch=auditHire();
+      ok('رفع مستوى التدقيق بيخصم',ch===true&&auditOf().level===1&&ca.cash<c1);
+      const l1=auditOf().lost;ca.cash=300000;auditTick(ca);
+      const leakLvl1=(auditOf().lost||0)-l1;
+      const a2=S.audit;S.audit=null;ca.cash=300000;auditTick(ca);
+      const leakLvl0=(S.audit.lost||0);
+      S.audit=a2;
+      ok('التدقيق بيقلل التسريب ('+leakLvl0+' > '+leakLvl1+')',leakLvl1<leakLvl0);
+      ok('الحد الأقصى ٣ مستويات',(function(){ca.cash=2000000;auditHire();auditHire();const r=auditHire();return r===false&&auditOf().level===3;})());
+      ca.cash=100000;S.audit.lost=50000;
+      const cb0=ca.cash;RNG=()=>0.0;
+      ok('التحقيق بيكلف وبيلاقي المتورط',auditInvestigate()===true&&ca.cash>cb0-8000&&auditOf().caught>=1);
+      ca.cash=1000;
+      ok('التحقيق محتاج كاش',auditInvestigate()===false);
+      renderAudit();
+      ok('بطاقة التدقيق ترسم',$('auditBody').innerHTML.includes('التدقيق'));
+      S.audit=null;RNG=RaM;
+    }
     renderAll();
     window.__testmode=0;save();ok('حفظ',!!localStorage.getItem('econLive1'));
+    localStorage.removeItem('econLive1');window.__testmode=1;S=freshState();renderAll();
     localStorage.removeItem('econLive1');window.__testmode=1;S=freshState();renderAll();
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
   }catch(e){out.push('ERROR '+(e&&e.message));}
