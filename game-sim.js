@@ -1,24 +1,3 @@
-function healthScore(){
-  const c=S.company;if(!c)return null;
-  const h=c.hist||[];
-  let trend=0.5;
-  if(h.length>=6){
-    const a=h.slice(-3).reduce((x,y)=>x+y.p,0)/3;
-    const b=h.slice(-6,-3).reduce((x,y)=>x+y.p,0)/3;
-    trend=Math.max(0,Math.min(1,0.5+(a-b)/Math.max(1000,Math.abs(b))*0.5));
-  }
-  const invFill=c.inv?Math.min(1,c.inv.units/Math.max(1,c.inv.cap*0.35)):0.5;
-  const parts=[
-   {k:'رضا الفريق',v:(c.morale==null?60:c.morale)/100,w:0.2,tip:'ارفع مستوى الرواتب أو قلّل عدد العمال'},
-   {k:'الجودة',v:(c.quality||0)/100,w:0.2,tip:'زود الإنفاق على الجودة أو عيّن مهندس جودة'},
-   {k:'العلامة التجارية',v:(c.brand==null?10:c.brand)/100,w:0.15,tip:'شغّل حملة تسويق'},
-   {k:'السمعة',v:(c.rep==null?50:c.rep)/100,w:0.2,tip:'عالج الأزمات فورًا'},
-   {k:'المخزون',v:invFill,w:0.1,tip:'اطلب شحنة قبل ما المخزون يخلص'},
-   {k:'اتجاه الربح',v:trend,w:0.15,tip:'حسّن الهامش أو خفّض التكاليف'}
-  ];
-  const score=Math.round(parts.reduce((s,p)=>s+p.v*p.w,0)*100);
-  return {score:score,parts:parts};
-}
 function renderHealth(){
   const b=$('healthBody');if(!b)return;
   const c=S.company;
@@ -368,6 +347,84 @@ function renderAcq(){
       (t.done?'<b style="color:var(--dim)">انتهت</b>':'<button class="btnGhost" onclick="buyAcq('+i+')" '+(!c||c.cash<t.offer?'disabled':'')+'>استحوذ</button>')+'</div>';
   }).join('')+'<div style="color:var(--dim);font-size:12px;margin-top:8px">عرض جديد بعد '+Math.max(0,S.acq.next-S.day)+' يوم</div>';
 }
+
+const TEAM_ROLES=['eng','sales','mkt'];
+function teamDef(){return {xp:{eng:0,sales:0,mkt:0},lastBonus:-99,bonuses:0,trains:0};}
+function teamOf(c){
+  const cc=c||S.company;
+  if(!cc)return teamDef();
+  if(!cc.team)cc.team=teamDef();
+  TEAM_ROLES.forEach(function(k){if(cc.team.xp[k]==null)cc.team.xp[k]=0;});
+  return cc.team;
+}
+function teamStars(k,c){
+  const t=teamOf(c);const xp=t.xp[k]||0;
+  return xp>=180?3:(xp>=120?2:(xp>=60?1:0));
+}
+function teamMult(k,c){return 1+teamStars(k,c)*0.15;}
+function teamEff(k,c){const cc=c||S.company;return ((cc&&cc.staff&&cc.staff[k])||0)*teamMult(k,cc);}
+function teamTick(c){
+  const t=teamOf(c);
+  const morale=(c.morale==null?60:c.morale);
+  const profit=Math.max(0,c.todayProfit||0);
+  const gain=1+morale/60+Math.min(2,profit/20000);
+  TEAM_ROLES.forEach(function(k){if((c.staff[k]||0)>0)t.xp[k]=Math.min(999,t.xp[k]+gain);});
+}
+function trainTeam(k){
+  const c=S.company;if(!c)return false;
+  if(!(c.staff&&c.staff[k]>0))return false;
+  const cost=6000;
+  if(c.cash<cost)return false;
+  const t=teamOf(c);
+  c.cash-=cost;t.xp[k]=Math.min(999,t.xp[k]+45);t.trains=(t.trains||0)+1;
+  const def=STAFF.find(function(x){return x.k===k;});
+  toast('🎓 تدريب '+def.n+' — الخبرة +45');
+  save();renderHR();renderCompany();
+  return true;
+}
+function payBonus(){
+  const c=S.company;if(!c)return false;
+  const t=teamOf(c);
+  if(S.day-t.lastBonus<10)return false;
+  const cost=Math.round(c.workers*40+staffCost(c));
+  if(c.cash<cost)return false;
+  c.cash-=cost;
+  const boost=Math.min(14,6+Math.round(cost/20000));
+  c.morale=Math.min(100,(c.morale==null?60:c.morale)+boost);
+  t.lastBonus=S.day;t.bonuses=(t.bonuses||0)+1;
+  toast('🎁 مكافأة جماعية — الروح المعنوية +'+boost);
+  pushNews(S,'🎁 "'+c.name+'" صرفت مكافأة للفريق — رضا الموظفين ارتفع',0.01,true,true);
+  save();renderHR();renderCompany();
+  return true;
+}
+function renderTeamBlock(c){
+  const t=teamOf(c);
+  let h='<div style="margin-top:12px;font-weight:700;font-size:13px">⭐ نجوم الفريق وخبرتهم</div>';
+  h+='<div style="font-size:11.5px;color:var(--dim);margin:4px 0 6px">كل نجمة تزيد إنتاجية الدور ١٥٪ — الخبرة بتزيد يوميًا مع الربح ورضا الفريق، أو بالتدريب.</div>';
+  TEAM_ROLES.forEach(function(k){
+    const def=STAFF.find(function(x){return x.k===k;});
+    const st=teamStars(k,c);const xp=Math.round(t.xp[k]||0);
+    const nextXp=st>=3?180:[60,120,180][st];
+    const pct=Math.min(100,Math.round(xp/180*100));
+    const stars='★'.repeat(st)+'☆'.repeat(3-st);
+    h+='<div style="padding:6px 0;border-bottom:1px solid var(--line)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px"><span>'+def.ic+' '+def.n+' <b style="color:#f59e0b;letter-spacing:2px">'+stars+'</b></span>'+
+      '<span style="font-size:12px;color:var(--dim)">خبرة '+xp+(st<3?' / '+nextXp:' · أقصى نجوم')+'</span></div>'+
+      '<div style="height:6px;background:var(--panel2);border-radius:5px;overflow:hidden;margin:4px 0 6px"><div style="height:100%;width:'+pct+'%;background:#f59e0b"></div></div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:var(--dim)"><span>إنتاجية الدور ×'+teamMult(k,c).toFixed(2)+'</span>'+
+      ((c.staff[k]||0)>0?'<button class="btnGhost" style="font-size:11.5px" onclick="trainTeam(\''+k+'\')" '+(c.cash<6000?'disabled':'')+'>🎓 تدريب (6.0 ألف د.)</button>':'<span>عيّن أول موظف في الدور</span>')+
+      '</div></div>';
+  });
+  const cool=Math.max(0,10-(S.day-t.lastBonus));
+  const bcost=Math.round(c.workers*40+staffCost(c));
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap">'+
+    '<span style="font-size:12px;color:var(--dim)">'+(cool>0?'المكافأة القادمة بعد '+cool+' يوم':'مكافأة جماعية جاهزة — ترفع رضا الفريق')+'</span>'+
+    '<button class="btnShort" style="font-size:12px" onclick="payBonus()" '+(cool>0||c.cash<bcost?'disabled':'')+'>🎁 مكافأة جماعية ('+fmtD(bcost)+')</button></div>';
+  if(t.bonuses||t.trains){
+    h+='<div style="margin-top:6px;font-size:11.5px;color:var(--dim)">مكافآت مصروفة: '+(t.bonuses||0)+' · جلسات تدريب: '+(t.trains||0)+'</div>';
+  }
+  return h;
+}
 function renderHR(){
   const c=S.company;const b=$('hrBody');if(!c||!b)return;
   if(c.morale==null)c.morale=60;if(c.wage==null)c.wage=1;if(!c.staff)c.staff={eng:0,sales:0,mkt:0};
@@ -395,6 +452,7 @@ function renderHR(){
     h+='<div style="'+RW+';flex-wrap:wrap"><span>'+x.ic+' '+x.n+' <b style="color:var(--accent);letter-spacing:1px">'+dots+'</b><br><span style="color:var(--dim);font-size:12px">'+x.d+'</span></span>'+
       (lv>=5?'<b style="color:var(--up)">الحد الأقصى ✔</b>':'<button class="btnGhost" onclick="hireStaff(\''+x.k+'\')" '+(c.cash<cost?'disabled':'')+'>'+(lv?'ترقية':'تعيين')+' ('+fmtD(cost)+')</button>')+'</div>';
   });
+  h+=renderTeamBlock(c);
   b.innerHTML=h;
   const w=$('sWage');
   if(w)w.oninput=()=>{S.company.wage=+w.value/100;renderHR();renderCompany();};
@@ -1019,16 +1077,4 @@ function closeMargin(forced){
   S.cash+=equity;
   S.marginPos=null;
   return equity;
-}
-function renderBench(){
-  const el=$('benchBar');if(!el)return;
-  let s=0,n=0;
-  Object.keys(S.assets).forEach(k=>{const a=S.assets[k];if(a.kind==='stock'&&a.hist.length&&a.hist[0]>0){s+=a.price/a.hist[0]-1;n++;}});
-  const mkt=n?s/n*100:0;
-  const you=(netWorth()/100000-1)*100;
-  const beat=you>=mkt;
-  el.innerHTML='<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px;align-items:center">'+
-  '<span>أداؤك: <b class="chg '+(you>=0?'up':'dn')+'">'+(you>=0?'+':'')+you.toFixed(1)+'%</b></span>'+
-  '<span>السوق: <b class="chg '+(mkt>=0?'up':'dn')+'">'+(mkt>=0?'+':'')+mkt.toFixed(1)+'%</b></span>'+
-  '<span class="badge" style="background:'+(beat?'#14532d':'#3f1d1d')+';color:'+(beat?'#86efac':'#fca5a5')+'">'+(beat?'🔥 متفوق على السوق':'🐢 متأخر عن السوق')+'</span></div>';
-                                             }
+  }
