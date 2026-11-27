@@ -413,6 +413,10 @@ tr.row:hover,tr.row.sel{background:#182442}
       <h3>🎯 العلامة التجارية والحملات</h3>
       <div id="brandBody"></div>
     </div>
+    <div class="card" id="repCard">
+      <h3>🛡️ السمعة والأزمات</h3>
+      <div id="repBody"></div>
+    </div>
     <div class="card" id="confCard">
       <h3>🎤 مؤتمر صحفي (للشركات المدرجة)</h3>
       <div id="confBody"></div>
@@ -624,6 +628,8 @@ function migrate(){
     if(!S.company.hist)S.company.hist=[];
     if(S.company.brand==null)S.company.brand=10;
     if(S.company.campaign===undefined)S.company.campaign=null;
+    if(S.company.rep==null)S.company.rep=50;
+    if(S.company.crisis===undefined)S.company.crisis=null;
   }
   if(!S.stats)S.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};
   if(S.stats.worstTrade==null)S.stats.worstTrade=0;
@@ -1150,6 +1156,19 @@ function runCompany(){
   }
   c.brand=Math.max(0,Math.min(100,c.brand+(c.campaign?0.15:0.02)-0.05));
   const campF=1+(c.campaign?c.campaign.boost:0);
+  if(c.rep==null)c.rep=50;
+  if(!c.crisis&&c.track.length>5&&RNG()<(0.05+(c.quality<35?0.04:0)+(c.morale<35?0.04:0)))startCrisis();
+  if(c.crisis){
+    c.crisis.left--;
+    c.brand=Math.max(0,(c.brand||10)-0.25);
+    if(c.crisis.left<=0){
+      c.rep=Math.max(0,c.rep-6);c.crisis=null;
+      pushNews(S,'انتهت أزمة "'+c.name+'" دون معالجة — السمعة تضررت',-0.01,false,true);
+      toast('انتهت الأزمة دون معالجة — السمعة -6');
+    }
+  }
+  const crisisF=c.crisis?(1-c.crisis.hit*0.3):1;
+  const repF=1+(c.rep-50)/500;
   const prod=0.72+c.morale/100*0.56;
   const sectorMood=avgSectorSent(c.sector);
   const fairPrice=40*(1+sectorMood)+c.quality*1.5;
@@ -1159,7 +1178,7 @@ function runCompany(){
   // المنافس يضغط على الطلب
   const rivalF=S.rival?Math.max(0.5,1-S.rival.strength*0.16):1;
   const salesBoost=1+(c.staff.sales||0)*0.08;
-  const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rivalF*salesBoost*strikeF*campF*(1+c.brand/400)*prod*rnd(0.85,1.15));
+  const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rivalF*salesBoost*strikeF*campF*crisisF*repF*(1+c.brand/400)*prod*rnd(0.85,1.15));
   const sold=Math.min(demand,c.workers*10*capacity*prod);
   const revenue=sold*c.price;
   const wageBill=c.workers*22*c.wage;
@@ -1829,6 +1848,61 @@ function renderCompany(){
   $('vWk').textContent=c.workers;
   $('sPrice').value=c.price;$('sRd').value=c.rd;$('sMk').value=c.marketing;$('sWk').value=c.workers;
 }
+const CRISES=[
+ {n:'تسريب شكاوى جودة',d:'عملاء نشروا صور منتجات معيبة على السوشيال',hit:0.8},
+ {n:'اتهام بغش في الإعلان',d:'جهة رقابية فتحت تحقيقًا في إحدى الحملات',hit:0.7},
+ {n:'أزمة تصريح مدير',d:'تصريح مسيء من مدير تنفيذي أغضب المتابعين',hit:0.6},
+ {n:'تأخر تسليم كبير',d:'دفعة كبيرة اتأخرت والاتهامات تطارد الشركة',hit:0.75}
+];
+function startCrisis(){
+  const c=S.company;if(!c||c.crisis)return;
+  const t=CRISES[Math.floor(RNG()*CRISES.length)];
+  c.crisis={n:t.n,d:t.d,left:4,hit:t.hit};
+  pushNews(S,'⚠️ أزمة سمعة لـ"'+c.name+'": '+t.n,-0.02,true,true);
+  toast('⚠️ أزمة سمعة: '+t.n);
+  renderRep();renderCompany();
+}
+function crisisRespond(kind){
+  const c=S.company;if(!c||!c.crisis)return;
+  if(c.rep==null)c.rep=50;
+  if(kind==='ignore'){toast('اخترت التجاهل — الأزمة مستمرة');return;}
+  const cost=kind==='comp'?20000:5000;
+  if(c.cash<cost)return toast('❌ الخزينة لا تكفي ('+fmtD(cost)+')');
+  c.cash-=cost;
+  if(kind==='apology'){
+    c.rep=Math.min(100,c.rep+3);c.brand=Math.max(0,(c.brand||10)-2);
+    pushNews(S,'📄 "'+c.name+'" اعتذرت علنًا عن '+c.crisis.n+' — الأزمة انتهت',0.005,false,true);
+    toast('📄 اعتذار علني — انتهت الأزمة');
+  }else{
+    c.rep=Math.min(100,c.rep+8);c.brand=Math.min(100,(c.brand||10)+1);
+    pushNews(S,'💸 "'+c.name+'" عوّضت المتضررين في '+c.crisis.n+' — ثقة السوق عادت',0.012,false,true);
+    toast('💸 تعويضات مدفوعة — السمعة ارتفعت');
+  }
+  S.achv.crisis=1;
+  c.crisis=null;renderRep();renderCompany();
+}
+function renderRep(){
+  const b=$('repBody');if(!b)return;
+  const c=S.company;
+  if(!c){b.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا.</div>';return;}
+  if(c.rep==null)c.rep=50;
+  const r=Math.round(c.rep);
+  const col=r>=60?'var(--up)':r>=35?'#f59e0b':'var(--dn)';
+  let h='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0"><span>سمعة الشركة</span><b style="color:'+col+'">'+r+'/100</b></div>';
+  h+='<div style="height:9px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:4px 0 10px"><div style="height:100%;width:'+r+'%;background:'+col+'"></div></div>';
+  if(c.crisis){
+    h+='<div style="background:rgba(239,68,68,.12);border:1px solid var(--dn);border-radius:12px;padding:10px;margin-bottom:8px">'+
+      '<div style="font-weight:700;color:var(--dn)">⚠️ '+c.crisis.n+' — باقي '+c.crisis.left+' يوم</div>'+
+      '<div style="font-size:12.5px;color:var(--dim);margin:4px 0 8px">'+c.crisis.d+' · الطلب -'+Math.round(c.crisis.hit*30)+'% لحد ما تتحل</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      '<button class="btnGhost" onclick="crisisRespond(\'apology\')">📄 اعتذار علني (5.0 ألف د.)</button>'+
+      '<button class="btnGhost" onclick="crisisRespond(\'comp\')">💸 تعويضات (20.0 ألف د.)</button>'+
+      '<button class="btnGhost" onclick="crisisRespond(\'ignore\')">🤐 تجاهل</button></div></div>';
+  }else{
+    h+='<div style="color:var(--dim);font-size:13px;padding:4px 0">لا توجد أزمة حاليًا. الأزمات بتيجي عشوائيًا وأكتر لو الجودة أو رضا الفريق واطي.</div>';
+  }
+  b.innerHTML=h;
+}
 const CAMPS=[
  {k:'social',n:'حملة سوشيال ميديا',ic:'📱',cost:15000,days:6,boost:0.15},
  {k:'tv',n:'حملة تلفزيونية',ic:'📺',cost:50000,days:10,boost:0.35},
@@ -2001,6 +2075,7 @@ const ACHV=[
  ['staff','🎓','طاقم نخبة','طاقم الإدارة بمستوى ٩',()=>!!S.company&&staffLevel(S.company)>=9],
  ['strike','✊','مفاوض','أنهيت إضرابًا عماليًا',()=>!!(S.achv&&S.achv.strike)],
  ['acq','🏢','مستحوذ','استحوذت على شركة صغيرة',()=>!!(S.achv&&S.achv.acq)],
+ ['crisis','🛡️','إدارة أزمة','عالجت أزمة سمعة',()=>!!(S.achv&&S.achv.crisis)],
 ];
 function checkAchv(){
   ACHV.forEach(a=>{if(!S.achv[a[0]]&&a[4]()){S.achv[a[0]]=1;toast('🏅 إنجاز جديد: '+a[2]);}});
@@ -2028,7 +2103,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();renderHR();renderPerf();renderAcq();renderBrand();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();renderHR();renderPerf();renderAcq();renderBrand();renderRep();}
 
 /* تبويبات */
 function showPage(p){
@@ -3487,6 +3562,33 @@ if(location.hash==='#test'){
       ok('العلامة تكبر أثناء الحملة',cc.brand>10);
       cc.campaign=null;cc.brand=100;for(let i=0;i<3;i++)runCompany();
       ok('العلامة محصورة ٠-١٠٠',cc.brand<=100&&cc.brand>=0);
+      // السمعة والأزمات
+      cc.crisis=null;cc.rep=50;cc.cash=300000;cc.quality=40;cc.morale=60;
+      renderRep();ok('بطاقة السمعة تعرض',$('repBody').innerHTML.includes('سمعة الشركة'));
+      startCrisis();
+      ok('أزمة سمعة تبدأ',!!cc.crisis&&cc.crisis.left===4);
+      renderRep();ok('لافتة الأزمة تظهر',$('repBody').innerHTML.includes('تجاهل'));
+      cc.cash=1000;crisisRespond('comp');
+      ok('تعويضات بدون كاش مرفوض',!!cc.crisis&&cc.cash===1000);
+      cc.cash=300000;const rep0=cc.rep;crisisRespond('comp');
+      ok('التعويضات تنهي الأزمة وترفع السمعة',!cc.crisis&&cc.rep>rep0&&cc.cash===280000);
+      startCrisis();const rep1=cc.rep;crisisRespond('apology');
+      ok('الاعتذار ينهي الأزمة بتكلفة أقل',!cc.crisis&&cc.cash===275000&&cc.rep>rep1-1);
+      startCrisis();crisisRespond('ignore');
+      ok('التجاهل يبقي الأزمة شغالة',!!cc.crisis);
+      for(let i=0;i<4;i++)runCompany();
+      ok('الأزمة تنتهي تلقائيًا بخصم سمعة',!cc.crisis&&cc.rep<rep1+20);
+      const Rc=RNG;RNG=()=>0.5;
+      for(const kk in S.assets){if(S.assets[kk].kind==='stock')S.assets[kk].sent=0;}
+      cc.workers=60;cc.price=200;cc.quality=40;cc.rd=0;cc.marketing=0;cc.staff={eng:0,sales:0,mkt:0};cc.strike=null;cc.morale=60;cc.campaign=null;cc.brand=10;cc.rep=50;cc.crisis=null;
+      runCompany();const sOk=cc.todaySold;
+      cc.crisis={n:'أزمة',d:'اختبار',left:3,hit:0.8};runCompany();const sBad=cc.todaySold;
+      cc.crisis=null;cc.rep=100;runCompany();const sRep=cc.todaySold;
+      cc.rep=0;runCompany();const sRepLow=cc.todaySold;
+      RNG=Rc;
+      ok('الأزمة تقلل الطلب',sOk>sBad);
+      ok('السمعة العالية ترفع الطلب',sRep>sRepLow);
+      cc.rep=50;cc.crisis=null;cc.brand=10;renderRep();
       const keepC=S.company;
       S.company={name:'قديمة',sector:'تقنية',cash:1000,price:40,rd:0,marketing:0,workers:10,quality:10,track:[]};
       migrate();
