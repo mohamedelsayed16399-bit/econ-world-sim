@@ -187,6 +187,7 @@ function migrate(){
   if(S.merger===undefined)S.merger=null;
   if(S.fr===undefined)S.fr=null;
   if(S.bid===undefined)S.bid=null;
+  if(S.audit===undefined)S.audit=null;
   if(!S.allies)S.allies={list:[],pact:null,heat:0,fines:0,log:[]};
   if(!S.allies.list)S.allies.list=[];if(S.allies.pact===undefined)S.allies.pact=null;
   if(S.allies.heat==null)S.allies.heat=0;if(S.allies.fines==null)S.allies.fines=0;if(!S.allies.log)S.allies.log=[];
@@ -195,7 +196,7 @@ function pushNews(st,text,impact,hot,good){
   st.news.unshift({d:st.day,h:st.hour,text,hot:!!hot,good:!!good});
   if(st.news.length>60)st.news.pop();
 }
-function save(){try{localStorage.setItem('econLive1',JSON.stringify(S));}catch(e){}}
+function save(){if(window.__testmode)return;try{localStorage.setItem('econLive1',JSON.stringify(S));}catch(e){}}
 function load(){try{const s=localStorage.getItem('econLive1');if(s){S=JSON.parse(s);return true;}}catch(e){}return false;}
 
 function companyValue(){
@@ -775,6 +776,7 @@ function runCompany(){
   c.branchProfit=branchProfit;
   frTick(c);
   bidTick(c);
+  auditTick(c);
   c.cash+=pFinal;
   c.todayRev=revenue;c.todayProfit=pFinal;c.todaySold=Math.round(sold);c.todaySub=subRev;
   c.quality=Math.min(100,c.quality+c.rd/4000+c.up.auto*0.05+teamEff('eng',c)*0.012+allyQualityBonus());
@@ -1677,4 +1679,4 @@ function supTick(){
     toast('📄 انتهى عقد التوريد مع '+a.name+' — اختار مورد جديد');
     pushNews(S,'📄 انتهى عقد توريد "'+c.name+'" مع "'+a.name+'"',0,false,true);
   }
-                }
+       }
