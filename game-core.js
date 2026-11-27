@@ -138,6 +138,7 @@ function migrate(){
     if(!S.company.inv)S.company.inv=invDef();
     if(!S.company.ipo)S.company.ipo={listed:false};
     if(!S.company.sup)S.company.sup={active:null,offers:[],history:[],deals:0};
+    if(!S.company.team)S.company.team={xp:{eng:0,sales:0,mkt:0},lastBonus:-99,bonuses:0,trains:0};
   }
   if(!S.stats)S.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};
   if(S.stats.worstTrade==null)S.stats.worstTrade=0;
@@ -689,14 +690,15 @@ function runCompany(){
   const sectorMood=avgSectorSent(c.sector);
   const fairPrice=40*(1+sectorMood)+c.quality*1.5;
   const priceFactor=Math.max(0.05,1-(c.price-fairPrice)/fairPrice*0.8);
-  const marketing=Math.log(1+c.marketing/100)*(1+0.4*c.up.brand+(c.staff.mkt||0)*0.12);
+  const marketing=Math.log(1+c.marketing/100)*(1+0.4*c.up.brand+teamEff('mkt',c)*0.12);
   const capacity=1+0.5*c.up.line;
   
   const rivalF=S.rival?Math.max(0.5,1-S.rival.strength*0.16):1;
-  const salesBoost=1+(c.staff.sales||0)*0.08;
+  const salesBoost=1+teamEff('sales',c)*0.08;
   const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rivalF*salesBoost*strikeF*campF*crisisF*repF*(1+c.brand/400)*prod*rnd(0.85,1.15));
   if(!c.inv)c.inv=invDef();
   supTick();
+  teamTick(c);
   const production=c.workers*8*capacity*prod*(c.strike?0.35:1);
   c.inv.units=Math.min(c.inv.cap,c.inv.units+production);
   if(c.inv.order){
@@ -747,7 +749,7 @@ function runCompany(){
   c.branchProfit=branchProfit;
   c.cash+=pFinal;
   c.todayRev=revenue;c.todayProfit=pFinal;c.todaySold=Math.round(sold);
-  c.quality=Math.min(100,c.quality+c.rd/4000+c.up.auto*0.05+(c.staff.eng||0)*0.012);
+  c.quality=Math.min(100,c.quality+c.rd/4000+c.up.auto*0.05+teamEff('eng',c)*0.012);
   c.quality=Math.max(0,c.quality-0.05);
   c.track.push(profit);
   if(!c.hist)c.hist=[];
@@ -1453,4 +1455,25 @@ function renderCorp(){
     h+='<div style="margin-top:8px;font-size:12.5px">للصعود مركزًا: محتاج <b>'+fmtD(Math.round(need))+'</b> قوة زيادة على "'+above.n+'" (قيمة + سمعة×800 + علامة×600)</div>';
   }
   b.innerHTML=h;
-                   }
+}
+function healthScore(){
+  const c=S.company;if(!c)return null;
+  const h=c.hist||[];
+  let trend=0.5;
+  if(h.length>=6){
+    const a=h.slice(-3).reduce((x,y)=>x+y.p,0)/3;
+    const b=h.slice(-6,-3).reduce((x,y)=>x+y.p,0)/3;
+    trend=Math.max(0,Math.min(1,0.5+(a-b)/Math.max(1000,Math.abs(b))*0.5));
+  }
+  const invFill=c.inv?Math.min(1,c.inv.units/Math.max(1,c.inv.cap*0.35)):0.5;
+  const parts=[
+   {k:'رضا الفريق',v:(c.morale==null?60:c.morale)/100,w:0.2,tip:'ارفع مستوى الرواتب أو قلّل عدد العمال'},
+   {k:'الجودة',v:(c.quality||0)/100,w:0.2,tip:'زود الإنفاق على الجودة أو عيّن مهندس جودة'},
+   {k:'العلامة التجارية',v:(c.brand==null?10:c.brand)/100,w:0.15,tip:'شغّل حملة تسويق'},
+   {k:'السمعة',v:(c.rep==null?50:c.rep)/100,w:0.2,tip:'عالج الأزمات فورًا'},
+   {k:'المخزون',v:invFill,w:0.1,tip:'اطلب شحنة قبل ما المخزون يخلص'},
+   {k:'اتجاه الربح',v:trend,w:0.15,tip:'حسّن الهامش أو خفّض التكاليف'}
+  ];
+  const score=Math.round(parts.reduce((s,p)=>s+p.v*p.w,0)*100);
+  return {score:score,parts:parts};
+                                   }
