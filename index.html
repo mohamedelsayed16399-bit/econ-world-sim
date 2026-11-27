@@ -215,6 +215,26 @@ tr.row:hover,tr.row.sel{background:#182442}
     <h3>🦄 استثمار المخاطر (شركات ناشئة)</h3>
     <div id="vcBody"></div>
   </div>
+  <div class="card">
+    <h3>📌 أوامر التداول المعلقة</h3>
+    <div class="tradeRow">
+      <select id="ordSym" style="flex:1"></select>
+      <select id="ordSide"><option value="buy">شراء عند نزوله إلى</option><option value="sell">بيع عند صعوده إلى</option></select>
+      <input id="ordQty" type="number" min="1" placeholder="الكمية" style="width:90px">
+      <input id="ordTarget" type="number" min="0" step="any" placeholder="السعر المستهدف" style="width:120px">
+      <button class="btnShort" id="btnOrdAdd">أضف الأمر</button>
+    </div>
+    <div id="ordList" style="margin-top:8px"></div>
+    <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:8px">
+      <div class="tradeRow">
+        <select id="alSym" style="flex:1"></select>
+        <select id="alDir"><option value="above">نبّهني لو صعد فوق</option><option value="below">نبّهني لو نزل تحت</option></select>
+        <input id="alTarget" type="number" min="0" step="any" placeholder="السعر" style="width:110px">
+        <button class="btnShort" id="btnAlAdd">🔔 أضف تنبيه</button>
+      </div>
+      <div id="alList" style="margin-top:6px"></div>
+    </div>
+  </div>
   <div class="card" id="hfCard">
     <h3>🐺 صندوق التحوط</h3>
     <div id="hfBody"></div>
@@ -466,6 +486,12 @@ const GLOBAL_EVENTS=[
   {ic:'🤖',n:'طفرة الذكاء الاصطناعي',days:3,eff:{'تقنية':2.4},msg:'شركات التقنية في عنان السماء'},
   {ic:'🏦',n:'أزمة مصرفية عالمية',days:2,eff:{'*':-1.4,'بنوك':-2.5},gold:true,msg:'البنوك في عين العاصفة'},
   {ic:'☀️',n:'انتعاش اقتصادي عالمي',days:3,eff:{'*':1.3},msg:'تفاؤل يعم كل الأسواق'},
+  {ic:'🔪',n:'حرب أسعار عنيفة',days:2,eff:{'تجزئة':-2.0,'أغذية':-0.6},msg:'عمالقة التجزئة يذبحون بعضهم بالتخفيضات'},
+  {ic:'🚀',n:'سباق فضاء جديد',days:3,eff:{'تقنية':1.8,'طاقة':0.7},msg:'عقود فضائية مليارية تشعل التقنية'},
+  {ic:'💱',n:'أزمة عملات عالمية',days:2,eff:{'*':-0.6,'بنوك':-1.6},gold:true,msg:'عملات تنهار والمستثمرون يلوذون بالذهب'},
+  {ic:'🏘️',n:'فقاعة عقارية',days:3,eff:{'عقارات':2.8,'بنوك':0.8},msg:'أسعار العقارات تحلق والبنوك تمول الحلم'},
+  {ic:'⚡',n:'قمع تنظيمي للكريبتو',days:2,eff:{'كريبتو':-2.8},msg:'حكومات تلوّح بالحظر والكريبتو ينزف'},
+  {ic:'🌾',n:'أزمة غذاء عالمية',days:3,eff:{'أغذية':2.4,'تجزئة':-0.9},msg:'محاصيل شحيحة وأسعار الغذاء تشتعل'},
 ];
 function pmult(){return 1+0.15*(S.prestige||0);}
 const COMPS=[
@@ -652,6 +678,9 @@ function tick(){
       a.hist.push(a.price);if(a.hist.length>2200)a.hist.shift();
     }
   }
+  // تنفيذ الأوامر المعلقة
+  checkOrders();
+  checkAlerts();
   // نهاية اليوم
   if(S.hour>=24){S.hour=0;S.day++;endOfDay();}
 }
@@ -727,7 +756,8 @@ function endOfDay(){
   if(S.gEvent){
     const e=S.gEvent;
     Object.keys(S.assets).forEach(k=>{const a=S.assets[k];
-      const ef=(a.kind==='stock')?(e.eff[a.sector]!==undefined?e.eff[a.sector]:(e.eff['*']||0)):0;
+      const secHit=e.eff[a.sector]!==undefined?e.eff[a.sector]:null;
+      const ef=secHit!==null?secHit:((a.kind==='stock')?(e.eff['*']||0):0);
       const goldB=(e.gold&&a.kind==='cmd')?1.1:0;
       if(ef||goldB){a.price=Math.max(a.base*0.05,a.price*(1+(ef+goldB)/100));a.hist[a.hist.length-1]=a.price;}
     });
@@ -1055,6 +1085,49 @@ function checkMilestones(){
 /* ================= التداول ================= */
 let sel='س:'+COMPS[0][0], tf=7;
 function fee(x){return x*0.001;}
+function checkAlerts(){
+  if(!S.alerts||!S.alerts.length)return;
+  const keep=[];
+  S.alerts.forEach(al=>{
+    const a=S.assets[al.sym];
+    if(!a)return;
+    const hit=al.dir==='above'?a.price>=al.target:a.price<=al.target;
+    if(hit){
+      toast('🔔 تنبيه: '+a.name+' '+(al.dir==='above'?'تجاوز':'نزل تحت')+' '+al.target+' (الحالي '+a.price.toFixed(2)+')');
+      beep(1200,.15);
+      pushNews(S,'🔔 تنبيه سعرك: '+a.name+' وصل '+a.price.toFixed(2),0,false,true);
+      log('تنبيه سعر '+a.name);
+    }else keep.push(al);
+  });
+  if(keep.length!==S.alerts.length){S.alerts=keep;save();renderAll();}
+}
+function checkOrders(){
+  if(!S.orders||!S.orders.length)return;
+  const keep=[];
+  S.orders.forEach(o=>{
+    const a=S.assets[o.sym];
+    if(!a)return;
+    let done=false;
+    if(o.side==='buy'&&a.price<=o.target){
+      const cost=o.qty*a.price+fee(o.qty*a.price);
+      if(cost<=S.cash){
+        S.cash-=cost;const tot=a.held*a.avg+o.qty*a.price;
+        a.held+=o.qty;a.avg=tot/a.held;S.stats.trades++;
+        toast('📌 نُفذ أمر شراء '+o.qty+' × '+a.name+' @ '+a.price.toFixed(2));log('تنفيذ أمر شراء '+a.name);
+      }else{toast('📌 أمر شراء '+a.name+' وصل للسعر لكن الكاش لا يكفي — أُلغي');}
+      done=true;
+    }else if(o.side==='sell'&&a.price>=o.target){
+      if(a.held>=o.qty){
+        S.cash+=o.qty*a.price-fee(o.qty*a.price);
+        a.held-=o.qty;if(!a.held)a.avg=0;S.stats.trades++;
+        toast('📌 نُفذ أمر بيع '+o.qty+' × '+a.name+' @ '+a.price.toFixed(2));log('تنفيذ أمر بيع '+a.name);
+      }else{toast('📌 أمر بيع '+a.name+' تحقق سعره لكن لا تملك الكمية — أُلغي');}
+      done=true;
+    }
+    if(!done)keep.push(o);
+  });
+  if(keep.length!==S.orders.length){S.orders=keep;save();renderAll();}
+}
 function buy(){
   const a=S.assets[sel];const q=Math.max(0,Math.floor(+$('qty').value||0));if(!q)return;
   const cost=q*a.price+fee(q*a.price);
@@ -1644,7 +1717,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();}
 
 /* تبويبات */
 function showPage(p){
@@ -2097,6 +2170,43 @@ function renderVC(){
       toast('🦄 استثمرت في ناشئة!');log('استثمار مخاطر '+fmtD(d.ask));save();renderAll();};
     $('btnVCSkip').onclick=()=>{S.vcDeal=null;S.vcNext=S.day+Math.round(rnd(2,5));save();renderAll();};
   }
+}
+function renderOrders(){
+  const selEl=$('ordSym');if(!selEl)return;
+  const keys=Object.keys(S.assets);
+  if(selEl.options.length!==keys.length)selEl.innerHTML=keys.map(k=>'<option value="'+k+'">'+S.assets[k].name+'</option>').join('');
+  $('btnOrdAdd').onclick=()=>{
+    const sym=selEl.value||keys[0],a=S.assets[sym];
+    const qty=Math.max(0,Math.floor(+$('ordQty').value||0));
+    const target=+$('ordTarget').value||0;
+    const side=$('ordSide').value;
+    if(!qty||target<=0)return toast('❌ حدد الكمية والسعر المستهدف');
+    S.orders.push({sym,side,qty,target});
+    toast('📌 أمر معلق: '+(side==='buy'?'شراء':'بيع')+' '+qty+' × '+a.name+' عند '+target);
+    log('أمر معلق جديد');save();renderAll();
+  };
+  const el=$('ordList');
+  if(!S.orders.length){el.innerHTML='<div style="font-size:12px;color:var(--dim)">لا أوامر معلقة — اضبط أمرًا ويتنفذ تلقائيًا لما السعر يوصله حتى لو مش متابع.</div>';return;}
+  el.innerHTML=S.orders.map((o,i)=>{const a=S.assets[o.sym];if(!a)return '';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--line)"><span>'+(o.side==='buy'?'🟢 شراء':'🔴 بيع')+' '+o.qty+' × '+a.name+' @ '+o.target+' <span style="color:var(--dim)">(الحالي '+a.price.toFixed(2)+')</span></span><button class="btnGhost" data-ord="'+i+'" style="padding:3px 8px;font-size:11px">إلغاء</button></div>';
+  }).join('');
+  el.querySelectorAll('[data-ord]').forEach(b=>b.onclick=()=>{S.orders.splice(+b.dataset.ord,1);save();renderAll();});
+  // تنبيهات الأسعار
+  const alSel=$('alSym');
+  if(alSel.options.length!==keys.length)alSel.innerHTML=keys.map(k=>'<option value="'+k+'">'+S.assets[k].name+'</option>').join('');
+  $('btnAlAdd').onclick=()=>{
+    const sym=alSel.value||keys[0],a=S.assets[sym];
+    const target=+$('alTarget').value||0;
+    if(target<=0)return toast('❌ حدد سعر التنبيه');
+    S.alerts.push({sym,dir:$('alDir').value,target});
+    toast('🔔 تنبيه مضاف لـ '+a.name);save();renderAll();
+  };
+  const alEl=$('alList');
+  if(!S.alerts.length){alEl.innerHTML='<div style="font-size:12px;color:var(--dim)">لا تنبيهات — نبّهك توست + خبر لما أي سعر يوصل للمستوى اللي تحدده.</div>';return;}
+  alEl.innerHTML=S.alerts.map((al,i)=>{const a=S.assets[al.sym];if(!a)return '';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:3px 0;border-bottom:1px solid var(--line)"><span>🔔 '+a.name+' '+(al.dir==='above'?'فوق':'تحت')+' '+al.target+' <span style="color:var(--dim)">(الحالي '+a.price.toFixed(2)+')</span></span><button class="btnGhost" data-al="'+i+'" style="padding:3px 8px;font-size:11px">حذف</button></div>';
+  }).join('');
+  alEl.querySelectorAll('[data-al]').forEach(b=>b.onclick=()=>{S.alerts.splice(+b.dataset.al,1);save();renderAll();});
 }
 function renderHF(){
   const el=$('hfBody');if(!el)return;
@@ -2664,6 +2774,36 @@ if(location.hash==='#test'){
     ok('حدث عالمي يؤثر',S.assets[goldK].price>gp0&&S.gEvent&&S.gEvent.days===1);
     endOfDay();ok('حدث عالمي ينتهي',S.gEvent===null||S.gEvent.n!=='حرب تجارية عالمية');
     renderGEvent();ok('بانر الحدث',!!$('gEventCard'));
+    ok('تنوع الأحداث العالمية',GLOBAL_EVENTS.length>=12);
+    const crK='ك:بيتكوين',cr0=S.assets[crK].price;
+    S.gEvent={ic:'⚡',n:'قمع تنظيمي للكريبتو',days:1,eff:{'كريبتو':-2.8},msg:'x'};
+    endOfDay();
+    ok('قمع الكريبتو يضرب الكريبتو',S.assets[crK].price<cr0*0.975);
+    S.gEvent=null;
+    // أوامر معلقة
+    const ok2=Object.keys(S.assets)[0],oa=S.assets[ok2];
+    S.cash=1000000;oa.held=5;oa.avg=oa.price;S.orders=[];
+    S.orders.push({sym:ok2,side:'buy',qty:3,target:oa.price*0.5});
+    const cashO0=S.cash;checkOrders();
+    ok('أمر شراء بهدف بعيد لا يتنفذ',S.orders.length===1&&S.cash===cashO0);
+    S.orders[0].target=oa.price*1.001;
+    const heldO0=oa.held;checkOrders();
+    ok('أمر شراء يتنفذ عند بلوغ الهدف',S.orders.length===0&&oa.held===heldO0+3&&S.cash<cashO0);
+    S.orders.push({sym:ok2,side:'sell',qty:2,target:oa.price*0.5});
+    checkOrders();
+    ok('أمر بيع بهدف أقل من الحالي يتنفذ',S.orders.length===0);
+    renderOrders();
+    ok('واجهة الأوامر تعرض',$('ordList').innerHTML.includes('أوامر معلقة')||$('ordList').innerHTML.length>0);
+    // تنبيهات الأسعار
+    S.alerts=[];
+    S.alerts.push({sym:ok2,dir:'above',target:oa.price*3});
+    checkAlerts();
+    ok('تنبيه بعيد لا يطلق',S.alerts.length===1);
+    S.alerts[0].target=oa.price*0.999;
+    checkAlerts();
+    ok('تنبيه يطلق عند بلوغ السعر',S.alerts.length===0);
+    S.alerts=[];
+    oa.held=0;oa.avg=0;S.orders=[];S.cash=100000;renderAll();
     // عمق السوق
     sel=Object.keys(S.assets).find(k=>S.assets[k].kind==='stock');
     renderDepth();ok('عمق السوق',!!$('depthChart'));
