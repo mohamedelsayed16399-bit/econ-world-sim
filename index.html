@@ -606,7 +606,7 @@ function freshState(){
   CITIES.forEach(ct=>{st.assets['ب:'+ct.n]={kind:'cidx',name:'بورصة '+ct.n,sector:ct.n,price:100,base:100,vol:0.022,sent:0,trend:0,hist:[100],held:0,avg:0,short:0,shortAvg:0};});
   st.npcs=NPC_NAMES.map(n=>({name:n,worth:rnd(60000,900000),prev:0}));
   SECTORS.forEach(s=>st.sectorHist[s]=[100]);
-  st.orders=[];st.alerts=[];st.acq={list:[],next:5};st.corp=null;st.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};st.snd=true;st.macro={phase:0,days:8};
+  st.orders=[];st.alerts=[];st.acq={list:[],next:5};st.corp=null;st.contests=[];st.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};st.snd=true;st.macro={phase:0,days:8};
   st.props={};st.propPrice={'شقة وسط البلد':60000,'محل تجاري':120000,'فيلا':200000,'برج مكاتب':500000};
   st.propBase=Object.assign({},st.propPrice);st.bonds=[];st.goal=null;st.rival=null;st.tut=0;st.rentTotal=0;
   st.theme='dark';st.bubbles={};st.offers=0;st.quests=[];st.questDay=0;st.bankruptcies=0;
@@ -629,6 +629,7 @@ function migrate(){
   if(!S.orders)S.orders=[];if(!S.alerts)S.alerts=[];
   if(!S.acq)S.acq={list:[],next:5};
   if(S.corp===undefined)S.corp=null;
+  if(!S.contests)S.contests=[];
   if(!S.macro)S.macro={phase:0,days:8};
   if(S.company){
     if(S.company.morale==null)S.company.morale=60;
@@ -765,6 +766,7 @@ function endOfDay(){
       c.rep=Math.max(0,Math.min(100,c.rep+rnd(-2,2)));
       c.brand=Math.max(0,Math.min(100,c.brand+rnd(-2,2)));
     });
+    runContest();
   }
   // فوائد
   S.dep*=1+S.rate/365;
@@ -1903,6 +1905,28 @@ function corpRows(){
   rows.sort((a,b)=>b.score-a.score);
   return rows;
 }
+function marketShare(){
+  const rows=corpRows();
+  const total=rows.reduce((s,r)=>s+r.value,0)||1;
+  const mine=rows.filter(r=>r.me).reduce((s,r)=>s+r.value,0);
+  return {mine:mine/total*100,top:rows[0]?(rows[0].value/total*100):0,rank:rows.findIndex(r=>r.me)+1,total:total};
+}
+function runContest(){
+  const rows=corpRows();
+  if(!rows.length)return;
+  const top=rows[0];const wk=Math.floor(S.day/7);const prize=30000;
+  if(!S.contests)S.contests=[];
+  S.contests.push({w:wk,n:top.n,me:!!top.me,score:Math.round(top.score)});
+  if(S.contests.length>8)S.contests.shift();
+  if(top.me&&S.company){
+    S.company.cash+=prize;
+    S.company.brand=Math.min(100,(S.company.brand==null?10:S.company.brand)+8);
+    pushNews(S,'🏆 "'+S.company.name+'" شركة الأسبوع — جايزة '+fmtD(prize)+' و+8 علامة',0.02,true,true);
+    toast('🏆 شركة الأسبوع! +'+fmtD(prize)+' و+8 علامة');
+  }else{
+    pushNews(S,'🏆 "'+top.n+'" شركة الأسبوع في السوق لهذا الأسبوع',0.005,false,true);
+  }
+}
 function renderCorp(){
   const b=$('corpBody');if(!b)return;
   const rows=corpRows();
@@ -1913,6 +1937,12 @@ function renderCorp(){
     const bg=r.me?'background:rgba(59,130,246,.12);border-radius:8px;':'';
     h+='<div style="'+G+';font-size:12.5px;padding:6px 2px;border-bottom:1px solid var(--line);'+bg+'"><span>'+(i+1)+'. '+(r.me?'<b>'+r.n+'</b>':r.n)+'</span><span>'+r.rep+'</span><span>'+r.brand+'</span><span>'+fmtD(r.value)+'</span></div>';
   });
+  const ms=marketShare();
+  h+='<div style="margin-top:10px;font-size:12.5px;color:var(--dim)">حصة السوق: <b style="color:var(--txt)">'+ms.mine.toFixed(1)+'%</b> · المتصدر '+ms.top.toFixed(1)+'%</div>';
+  h+='<div style="height:8px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:4px 0 6px"><div style="height:100%;width:'+Math.min(100,ms.mine).toFixed(1)+'%;background:var(--accent)"></div></div>';
+  if(S.contests&&S.contests.length){
+    h+='<div style="margin-top:8px;font-size:12px;color:var(--dim)">آخر أبطال الأسبوع: '+S.contests.slice(-3).reverse().map(c=>'<b style="color:'+(c.me?'var(--up)':'var(--txt)')+'">'+c.n+'</b>').join(' · ')+'</div>';
+  }
   if(myIdx<0){
     h+='<div style="margin-top:8px;color:var(--dim);font-size:12.5px">أسّس شركة عشان تدخل الترتيب.</div>';
   }else if(myIdx===0){
@@ -3823,6 +3853,24 @@ if(location.hash==='#test'){
       const snap=S.corp.map(c=>c.value);
       [7,14,21].forEach(d=>{S.day=d;endOfDay();});
       ok('المنافسون بيتحركوا أسبوعيًا',S.corp.some((c,i)=>c.value!==snap[i]));
+      // تحديات الأسبوع بين الشركات
+      S.corp=null;initCorp();S.contests=[];
+      cc.cash=5000000;cc.track=new Array(365).fill(20000);cc.lastYearProfit=365*20000;cc.quality=100;cc.rep=100;cc.brand=95;
+      const cashWin=cc.cash,brandWin=cc.brand;
+      runContest();
+      ok('شركة الأسبوع تمنح الجايزة',S.contests.length===1&&S.contests[0].me===true&&cc.cash===cashWin+30000&&cc.brand===brandWin+5);
+      cc.cash=1000;cc.track=[];cc.lastYearProfit=0;cc.quality=5;cc.rep=5;cc.brand=5;
+      const cashLose=cc.cash;runContest();
+      ok('خسارة اللقب لا تمنح جايزة',S.contests.length===2&&S.contests[1].me===false&&cc.cash===cashLose);
+      for(let i=0;i<10;i++)runContest();
+      ok('سجل الأبطال محدود بـ٨',S.contests.length===8);
+      const ms=marketShare();
+      ok('حصة السوق تُحسب',ms.mine>=0&&ms.mine<=100&&ms.total>0);
+      renderCorp();
+      ok('حصة السوق تظهر في البطاقة',$('corpBody').innerHTML.includes('حصة السوق'));
+      ok('سجل الأبطال يظهر',$('corpBody').innerHTML.includes('آخر أبطال الأسبوع'));
+      S.day=7;endOfDay();
+      ok('تحدي الأسبوع يشتغل مع الدورة الأسبوعية',S.contests[S.contests.length-1].w===1);
       S.corp=null;initCorp();renderCorp();
       const keepC=S.company;
       S.company={name:'قديمة',sector:'تقنية',cash:1000,price:40,rd:0,marketing:0,workers:10,quality:10,track:[]};
