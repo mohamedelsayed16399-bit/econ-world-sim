@@ -395,6 +395,15 @@ tr.row:hover,tr.row.sel{background:#182442}
       <p style="font-size:12.5px;color:var(--dim);margin:4px 0 10px">رضا الفريق يحدد إنتاجيتهم. الرواتب المرتفعة ترفع الرضا والإنتاج، والمنخفضة توفّر اليوم لكن العمال يستقيلون.</p>
       <div id="hrBody"></div>
     </div>
+    <div class="card" id="perfCard">
+      <h3>📊 لوحة أداء الشركة</h3>
+      <div class="kpis" id="perfKpis"></div>
+      <div style="display:flex;gap:14px;align-items:flex-start;margin-top:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:150px"><div style="font-size:12.5px;color:var(--dim);margin-bottom:4px">أرباح آخر ٦٠ يوم</div><canvas id="perfChart" style="width:100%;height:56px;display:block"></canvas></div>
+        <div style="flex:1;min-width:150px"><div style="font-size:12.5px;color:var(--dim);margin-bottom:4px">المبيعات اليومية</div><canvas id="perfSold" style="width:100%;height:56px;display:block"></canvas></div>
+      </div>
+      <div id="perfCmp" style="margin-top:10px;font-size:13px"></div>
+    </div>
     <div class="card" id="confCard">
       <h3>🎤 مؤتمر صحفي (للشركات المدرجة)</h3>
       <div id="confBody"></div>
@@ -602,6 +611,7 @@ function migrate(){
     if(S.company.wage==null)S.company.wage=1;
     if(!S.company.staff)S.company.staff={eng:0,sales:0,mkt:0};
     STAFF.forEach(x=>{if(S.company.staff[x.k]==null)S.company.staff[x.k]=0;});
+    if(!S.company.hist)S.company.hist=[];
   }
   if(!S.stats)S.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};
   if(S.stats.worstTrade==null)S.stats.worstTrade=0;
@@ -1150,6 +1160,9 @@ function runCompany(){
   c.quality=Math.min(100,c.quality+c.rd/4000+c.up.auto*0.05+(c.staff.eng||0)*0.012);
   c.quality=Math.max(0,c.quality-0.05);
   c.track.push(profit);
+  if(!c.hist)c.hist=[];
+  c.hist.push({r:Math.round(revenue),p:Math.round(pFinal),s:Math.round(sold),m:Math.round(c.morale)});
+  if(c.hist.length>90)c.hist.shift();
   if(c.track.length>365)c.track.shift();
   const yr=c.track.slice(-365).reduce((a,b)=>a+b,0);
   c.lastYearProfit=yr;
@@ -1824,6 +1837,34 @@ function renderHR(){
   const w=$('sWage');
   if(w)w.oninput=()=>{S.company.wage=+w.value/100;renderHR();renderCompany();};
 }
+function renderPerf(){
+  const c=S.company;const k=$('perfKpis');if(!c||!k)return;
+  if(!c.hist)c.hist=[];
+  const h=c.hist;
+  const last=h[h.length-1]||{r:0,p:0,s:0,m:0};
+  const margin=last.r>0?last.p/last.r*100:0;
+  const prod=c.workers>0?last.s/c.workers:0;
+  const w30=h.slice(-30);
+  const avg=w30.length?w30.reduce((a,b)=>a+b.p,0)/w30.length:0;
+  const n1=Math.min(7,h.length),n2=Math.min(7,Math.max(0,h.length-7));
+  const a1=n1?h.slice(-n1).reduce((x,y)=>x+y.p,0)/n1:0;
+  const b1=n2?h.slice(-n1-n2,-n1).reduce((x,y)=>x+y.p,0)/n2:0;
+  const trend=b1!==0?((a1-b1)/Math.abs(b1)*100):0;
+  k.innerHTML=kpi('هامش الربح',margin.toFixed(1)+'%')+kpi('إنتاجية العامل',prod.toFixed(1)+' وحدة')+
+    kpi('متوسط ربح ٣٠ يوم',fmtD(Math.round(avg)))+kpi('اتجاه الربح',(trend>=0?'▲ +':'▼ ')+trend.toFixed(1)+'%');
+  const cv=$('perfChart');if(cv&&h.length>1)spark(cv,h.slice(-60).map(x=>x.p));
+  const sv=$('perfSold');if(sv&&h.length>1)spark(sv,h.slice(-60).map(x=>x.s));
+  const cmp=$('perfCmp');
+  if(cmp){
+    let t='';
+    if(S.rival){
+      const mine=companyValue();const rv=Math.round(120000*S.rival.strength);
+      t+='<div>⚔️ مقابل '+S.rival.name+': قيمة شركتك '+fmtD(mine)+' — تقدير قيمة المنافس '+fmtD(rv)+' '+(mine>=rv?'<b style="color:var(--up)">متقدم ✔</b>':'<b style="color:var(--dn)">متأخر</b>')+'</div>';
+    }
+    t+='<div style="color:var(--dim);margin-top:4px">أيام مسجلة: '+h.length+' / 90</div>';
+    cmp.innerHTML=t;
+  }
+}
 let secFilter=null;
 function renderIdx(){
   const g=$('idxGrid');g.innerHTML='';
@@ -1886,7 +1927,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();renderHR();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();renderHR();renderPerf();}
 
 /* تبويبات */
 function showPage(p){
@@ -3259,11 +3300,12 @@ if(location.hash==='#test'){
       ok('الرواتب المنخفضة تخفض الرضا',cc.morale<35);
       ok('استقالات عند الرضا المنخفض',cc.workers<200);
       const R0=RNG;RNG=()=>0.5;
+      cc.strike=null;
       cc.workers=60;cc.staff={eng:0,sales:0,mkt:0};cc.wage=1;cc.price=40;cc.quality=40;cc.rd=0;cc.marketing=0;cc.morale=60;
       runCompany();const soldBase=cc.todaySold;
       cc.morale=100;runCompany();const soldHi=cc.todaySold;
       cc.morale=0;runCompany();const soldLo=cc.todaySold;
-      cc.morale=60;cc.staff={eng:0,sales:3,mkt:0};runCompany();const soldMgr=cc.todaySold;
+      cc.morale=60;cc.strike=null;cc.staff={eng:0,sales:3,mkt:0};runCompany();const soldMgr=cc.todaySold;
       cc.staff={eng:0,sales:0,mkt:0};cc.quality=40;const qA=cc.quality;runCompany();const qNoEng=cc.quality-qA;
       cc.quality=40;cc.staff={eng:3,sales:0,mkt:0};const qB=cc.quality;runCompany();const qEng=cc.quality-qB;
       RNG=R0;
@@ -3292,6 +3334,18 @@ if(location.hash==='#test'){
       cc.strike={days:2,asked:130};renderHR();
       ok('لافتة الإضراب تظهر في البطاقة',$('hrBody').innerHTML.includes('إضراب عمالي'));
       cc.strike=null;cc.wage=1;cc.morale=60;renderHR();
+      // لوحة أداء الشركة
+      cc.hist=[];cc.workers=60;cc.cash=400000;cc.morale=60;cc.wage=1;cc.staff={eng:0,sales:0,mkt:0};
+      for(let i=0;i<5;i++)runCompany();
+      ok('سجل الأداء يتجمع',cc.hist.length===5&&typeof cc.hist[4].r==='number'&&typeof cc.hist[4].s==='number');
+      for(let i=0;i<100;i++)runCompany();
+      ok('سجل الأداء محدود بـ٩٠ يوم',cc.hist.length===90);
+      renderPerf();
+      ok('لوحة الأداء تعرض مؤشرات',$('perfKpis').innerHTML.includes('هامش الربح')&&$('perfKpis').innerHTML.includes('إنتاجية العامل'));
+      ok('رسوم الأداء موجودة',!!$('perfChart')&&!!$('perfSold')&&$('perfCmp').innerHTML.includes('أيام مسجلة'));
+      const keepP=S.company;
+      S.company={name:'قديمة٢',sector:'تقنية',cash:1000,price:40,rd:0,marketing:0,workers:10,quality:10,track:[]};
+      migrate();ok('ترحيل يضيف سجل الأداء',Array.isArray(S.company.hist));S.company=keepP;
       const keepC=S.company;
       S.company={name:'قديمة',sector:'تقنية',cash:1000,price:40,rd:0,marketing:0,workers:10,quality:10,track:[]};
       migrate();
