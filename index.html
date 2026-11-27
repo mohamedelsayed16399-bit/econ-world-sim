@@ -215,6 +215,10 @@ tr.row:hover,tr.row.sel{background:#182442}
     <h3>🦄 استثمار المخاطر (شركات ناشئة)</h3>
     <div id="vcBody"></div>
   </div>
+  <div class="card" id="hfCard">
+    <h3>🐺 صندوق التحوط</h3>
+    <div id="hfBody"></div>
+  </div>
   <div class="card" id="miningCard">
     <h3>⛏️ مزرعة تعدين الكريبتو</h3>
     <div id="miningBody"></div>
@@ -242,6 +246,10 @@ tr.row:hover,tr.row.sel{background:#182442}
   <div class="card">
     <h3>⚔️ مبارزة المتداولين</h3>
     <div id="duelBody"></div>
+  </div>
+  <div class="card">
+    <h3>📅 التقويم الاقتصادي</h3>
+    <div id="econCal"></div>
   </div>
   <div class="card">
     <h3>🎯 مهام اليوم <button class="btnGhost" id="btnAdvisor" style="float:left;font-size:12px">🤖 اسأل المستشار</button></h3>
@@ -310,6 +318,7 @@ tr.row:hover,tr.row.sel{background:#182442}
   <div class="card"><h3>🔍 التحليل الفني</h3>
     <div class="tradeRow"><select id="taSel" style="flex:1"></select></div>
     <div class="kpis" id="taKpis"></div>
+    <canvas id="taChart" width="520" height="180" style="width:100%;max-width:520px;border:1px solid var(--line);border-radius:10px;margin-top:8px;background:var(--card)"></canvas>
     <div id="taSignal" style="font-size:15px;font-weight:700;margin-top:8px"></div>
     <div id="taNote" style="font-size:12px;color:var(--dim);margin-top:6px"></div>
   </div>
@@ -530,7 +539,7 @@ function freshState(){
   st.theme='dark';st.bubbles={};st.offers=0;st.quests=[];st.questDay=0;st.bankruptcies=0;
   st.lotto={pool:20000,tickets:0};st.moodHist=[0.15];st.sortKey=null;
   st.notifs=[];st.splits=0;
-  st.prestige=0;st.gEvent=null;st.cityStatus={};st.challenge=null;st.options=[];st.autopilot=false;st.subsidiary=null;st.weekly=null;st.hof=[];st.mining={rigs:0,upg:0,total:0};st.auction=null;st.empire=[];st.ins={until:0,paid:0};st.followers=0;st.quiz={day:0,streak:0,won:0};st.duel=null;st.duelWins=0;st.fundP=[100,100,100];st.fundHist=[[100],[100],[100]];st.fundH=[0,0,0];st.fundAvg=[0,0,0];st.confDay=-20;st.vc=[];st.vcDeal=null;st.vcNext=3;st.vcWins=0;st.vcLost=0;st.marginPos=null;st.recPeak=100000;st.recBestDay=0;
+  st.prestige=0;st.gEvent=null;st.cityStatus={};st.challenge=null;st.options=[];st.autopilot=false;st.subsidiary=null;st.weekly=null;st.hof=[];st.mining={rigs:0,upg:0,total:0};st.auction=null;st.empire=[];st.ins={until:0,paid:0};st.followers=0;st.quiz={day:0,streak:0,won:0};st.duel=null;st.duelWins=0;st.fundP=[100,100,100];st.fundHist=[[100],[100],[100]];st.fundH=[0,0,0];st.fundAvg=[0,0,0];st.confDay=-20;st.vc=[];st.vcDeal=null;st.vcNext=3;st.vcWins=0;st.vcLost=0;st.marginPos=null;st.recPeak=100000;st.recBestDay=0;st.hf={on:false,capital:0,hwm:0,fees:0,streak:0};
   pushNews(st,'افتتاح السوق العالمية للمحاكاة — حظ موفق أيها المستثمر!',0,false);
   return st;
 }
@@ -574,6 +583,7 @@ function migrate(){
   if(!S.fundP)S.fundP=[100,100,100];if(!S.fundHist)S.fundHist=[[100],[100],[100]];if(!S.fundH)S.fundH=[0,0,0];if(!S.fundAvg)S.fundAvg=[0,0,0];
   if(S.confDay==null)S.confDay=-20;
   if(!S.vc)S.vc=[];if(S.vcDeal===undefined)S.vcDeal=null;if(S.vcNext==null)S.vcNext=3;if(S.vcWins==null)S.vcWins=0;if(S.vcLost==null)S.vcLost=0;
+  if(!S.hf)S.hf={on:false,capital:0,hwm:0,fees:0,streak:0};
   if(S.marginPos===undefined)S.marginPos=null;if(S.recPeak==null)S.recPeak=100000;if(S.recBestDay==null)S.recBestDay=0;
 }
 function pushNews(st,text,impact,hot,good){
@@ -940,6 +950,24 @@ function endOfDay(){
       S.cash+=comp;S.ins.paid+=comp;
       pushNews(S,'🛡️ تأمين المحفظة عوّضك '+fmtD(comp)+' بعد هبوط حاد',0,true,true);
       toast('🛡️ تعويض تأمين: '+fmtD(comp));
+    }
+  }
+  // صندوق التحوط: رأس مال المستثمرين يتبع أداءك ورسوم الأداء ليك
+  if(S.hf&&S.hf.on&&S.nwHist.length){
+    const prev=S.nwHist[S.nwHist.length-1],cur=netWorth();
+    const r=prev>0?cur/prev-1:0;
+    S.hf.capital*=1+r*0.8;
+    if(r<0){S.hf.streak++;
+      if(S.hf.streak>=3&&S.hf.capital>0){
+        S.hf.capital*=0.7;S.hf.hwm=Math.min(S.hf.hwm,S.hf.capital);S.hf.streak=0;
+        pushNews(S,'🐺 مستثمرو الصندوق سحبوا ٣٠٪ من رأس المال بعد ٣ أيام خسارة متتالية!',-0.01,true,true);
+      }
+    }else{S.hf.streak=0;if(r>0.01)S.hf.capital*=1.05;}
+    if(S.hf.capital>S.hf.hwm){
+      const fee=(S.hf.capital-S.hf.hwm)*0.2;
+      S.hf.capital-=fee;S.hf.hwm=S.hf.capital;
+      S.cash+=fee;S.hf.fees+=fee;
+      pushNews(S,'🐺 صندوق التحوط: رسوم أداء +'+fmtD(Math.round(fee))+' (٢٠٪ من أرباح المستثمرين)',0,true,true);
     }
   }
   S.nwHist.push(netWorth());
@@ -1616,7 +1644,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();}
 
 /* تبويبات */
 function showPage(p){
@@ -1797,10 +1825,39 @@ function renderTA(){
   const ma7=ma(7),ma30=ma(30);
   let rsi=50;
   if(h.length>15){let g=0,l=0;for(let i=h.length-14;i<h.length;i++){const d=h[i]-h[i-1];if(d>0)g+=d;else l-=d;}rsi=l===0?(g>0?100:50):100-100/(1+g/l);}
-  $('taKpis').innerHTML=kpi('متوسط ٧ ساعات',fmtD(ma7))+kpi('متوسط ٣٠ ساعة',fmtD(ma30))+kpi('مؤشر RSI',rsi.toFixed(0));
+  let std=0;if(h.length>=20){const m=ma(20);std=Math.sqrt(h.slice(-20).reduce((x,y)=>x+(y-m)*(y-m),0)/20);}
+  const bbHi=ma(20)+2*std,bbLo=ma(20)-2*std;
+  const bbPct=std>0?(a.price-bbLo)/(bbHi-bbLo)*100:50;
+  const ema=(n)=>{if(h.length<n)return a.price;const k=2/(n+1);let e=h[h.length-n];for(let i=h.length-n+1;i<h.length;i++)e=h[i]*k+e*(1-k);return e;};
+  const macd=ema(12)-ema(26);
+  let macdSig=macd;for(let back=Math.min(8,h.length-2);back>=0;back--){const hh=h.slice(0,h.length-back);if(hh.length>=27){const kk=2/10;const em=n=>{const k2=2/(n+1);let e=hh[hh.length-n];for(let i=hh.length-n+1;i<hh.length;i++)e=hh[i]*k2+e*(1-k2);return e;};const v=em(12)-em(26);if(back===Math.min(8,h.length-2))macdSig=v;else macdSig=v*kk+macdSig*(1-kk);}}
+  const macdH=macd-macdSig;
+  $('taKpis').innerHTML=kpi('متوسط ٧ ساعات',fmtD(ma7))+kpi('متوسط ٣٠ ساعة',fmtD(ma30))+kpi('مؤشر RSI',rsi.toFixed(0))+kpi('بولينجر ٪B',bbPct.toFixed(0)+'٪')+kpi('ماكد',(macdH>=0?'+':'')+macdH.toFixed(2));
+  const cv=$('taChart');
+  if(cv&&h.length>=2){
+    const ctx=cv.getContext('2d');const W=cv.width,H=cv.height;
+    ctx.clearRect(0,0,W,H);ctx.direction='ltr';
+    const N=Math.min(h.length,120);const data=h.slice(-N);
+    const mn=Math.min.apply(null,data),mx=Math.max.apply(null,data),rg=(mx-mn)||1;
+    const px=i=>i/(N-1)*(W-40)+30,py=v=>H-12-(v-mn)/rg*(H-24);
+    ctx.strokeStyle='rgba(148,163,184,.25)';ctx.beginPath();
+    for(let g=0;g<4;g++){const y=12+(H-24)*g/3;ctx.moveTo(30,y);ctx.lineTo(W-10,y);}ctx.stroke();
+    ctx.fillStyle='rgba(148,163,184,.8)';ctx.font='10px sans-serif';ctx.textAlign='left';
+    for(let g=0;g<4;g++){const v=mx-rg*g/3;ctx.fillText(v.toFixed(v<10?3:0),2,12+(H-24)*g/3+3);}
+    const line=(fn,color,dash)=>{ctx.strokeStyle=color;ctx.lineWidth=1.6;ctx.setLineDash(dash||[]);ctx.beginPath();data.forEach((_,i)=>{if(i===0)ctx.moveTo(px(i),py(fn(i)));else ctx.lineTo(px(i),py(fn(i)));});ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;};
+    if(N>=7)line(i=>data.slice(Math.max(0,i-6),i+1).reduce((x,y)=>x+y,0)/data.slice(Math.max(0,i-6),i+1).length,'rgba(251,191,36,.85)',[4,3]);
+    if(N>=30)line(i=>data.slice(Math.max(0,i-29),i+1).reduce((x,y)=>x+y,0)/data.slice(Math.max(0,i-29),i+1).length,'rgba(96,165,250,.85)',[2,3]);
+    line(i=>data[i],'rgba(34,197,94,.95)');
+    ctx.fillStyle='rgba(148,163,184,.9)';ctx.font='11px sans-serif';
+    ctx.fillText('green price / yellow MA7 / blue MA30',32,H-2);
+  }
   let sig,col;
   if(rsi>=70){sig='🔴 تشبع شرائي — حذر من تصحيح';col='var(--down)';}
   else if(rsi<=30){sig='🟢 تشبع بيعي — فرصة شراء محتملة';col='var(--up)';}
+  else if(bbPct>95){sig='🔴 السعر عند سقف بولينجر — منطقة مقاومة';col='var(--down)';}
+  else if(bbPct<5){sig='🟢 السعر عند قاع بولينجر — منطقة دعم';col='var(--up)';}
+  else if(macdH>0&&ma7>ma30){sig='🟢 اتجاه صاعد قوي — ماكد ومتوسطات إيجابية';col='var(--up)';}
+  else if(macdH<0&&ma7<ma30){sig='🔴 اتجاه هابط — ماكد ومتوسطات سلبية';col='var(--down)';}
   else if(ma7>ma30){sig='🟢 اتجاه صاعد — المتوسط القصير فوق الطويل';col='var(--up)';}
   else if(ma7<ma30){sig='🔴 اتجاه هابط — المتوسط القصير تحت الطويل';col='var(--down)';}
   else{sig='⚪ محايد';col='var(--dim)';}
@@ -2041,6 +2098,22 @@ function renderVC(){
     $('btnVCSkip').onclick=()=>{S.vcDeal=null;S.vcNext=S.day+Math.round(rnd(2,5));save();renderAll();};
   }
 }
+function renderHF(){
+  const el=$('hfBody');if(!el)return;
+  const ok2=netWorth()>=1000000||(S.prestige||0)>=1;
+  let h='';
+  if(!S.hf.on){
+    if(ok2)h='<div style="font-size:12.5px;color:var(--dim);margin-bottom:6px">مستثمرون أثرياء مستعدون يدخلوا معك: تدير <b>أموالهم</b> بنفس أداء محفظتك وتاخد <b style="color:var(--gold)">٢٠٪ رسوم أداء</b> من كل ربح جديد. ٣ أيام خسارة متتالية والمستثمرين يسحبوا ٣٠٪.</div><div class="tradeRow"><button class="btnShort" id="btnHFOpen">افتح الصندوق (رأس مال مبدئي ٢٥٠ ألف)</button></div>';
+    else h='<div style="font-size:12.5px;color:var(--dim)">🔒 يتفتح عند صافي ثروة مليون دولار أو نجمة أسطورة ⭐ — المستثمرون الكبار بيثقوا في الكبار بس.</div>';
+  }else{
+    h='<div class="kpis">'+kpi('رأس مال المستثمرين',fmtD(Math.round(S.hf.capital)))+kpi('أعلى مستوى (HWM)',fmtD(Math.round(S.hf.hwm)))+kpi('إجمالي رسومك',fmtD(Math.round(S.hf.fees)))+kpi('أيام خسارة متتالية',S.hf.streak)+'</div>'+
+    '<div style="font-size:12px;color:var(--dim);margin-top:4px">الصندوق يتحرك مع عائدك اليومي (×٠.٨). ربح فوق ١٪ يجذب مستثمرين جدد (+٥٪).</div>'+
+    '<div class="tradeRow" style="margin-top:6px"><button class="btnGhost" id="btnHFClose">أغلق الصندوق</button></div>';
+  }
+  el.innerHTML=h;
+  const bo=$('btnHFOpen');if(bo)bo.onclick=()=>{S.hf.on=true;S.hf.capital=250000;S.hf.hwm=250000;S.hf.streak=0;toast('🐺 فتحت صندوق التحوط!');pushNews(S,'🐺 '+S.name+' أطلق صندوق تحوط — المستثمرون يصطفون!',0.01,true,true);log('فتح صندوق تحوط');save();renderAll();};
+  const bc=$('btnHFClose');if(bc)bc.onclick=()=>{S.hf.on=false;S.hf.capital=0;S.hf.hwm=0;toast('أغلقت الصندوق — المستثمرون أخذوا أموالهم');log('إغلاق صندوق التحوط');save();renderAll();};
+}
 function renderMargin(){
   const el=$('marginInfo');if(!el)return;
   if(S.marginPos){const m=S.marginPos;const a=S.assets[m.sym];
@@ -2096,6 +2169,25 @@ function renderBackup(){
       toast('📥 تم استيراد الحفظ بنجاح');
     }catch(e){toast('❌ نص حفظ غير صالح');}
   };
+}
+function econEvents(){
+  const ev=[];
+  const earn=(10-S.day%10)%10;ev.push({d:earn,t:'📊 موسم الأرباح — مفاجآت تهز الأسعار'});
+  const tax=(30-S.day%30)%30;ev.push({d:tax,t:'🧾 ضريبة الأرباح (١٠٪ من أرباح ٣٠ يوم)'});
+  if(S.bonds.length){const nb=Math.min.apply(null,S.bonds.map(b=>b.due))-S.day;ev.push({d:Math.max(0,nb),t:'💵 استحقاق سند حكومي (+٤٪)'});}
+  if(S.weekly)ev.push({d:Math.max(0,S.weekly.endDay-S.day),t:'🏁 نهاية '+(S.weekly.scn!=null?SCEN[S.weekly.scn].n:'تحدي الأسبوع')});
+  if(S.auction)ev.push({d:Math.max(0,S.auction.ends-S.day),t:'🔨 حسم مزاد "'+S.auction.name+'"'});
+  if(S.duel)ev.push({d:Math.max(0,S.duel.day0+5-S.day),t:'⚔️ نهاية مبارزة المتداولين'});
+  if(S.vc.length){const nd=Math.min.apply(null,S.vc.map(v=>v.due))-S.day;ev.push({d:Math.max(0,nd),t:'🦄 خروج استثمار مخاطر'});}
+  if(S.options.length){const no=Math.min.apply(null,S.options.map(o=>o.expiry))-S.day;ev.push({d:Math.max(0,no),t:'📈 انتهاء عقد خيارات'});}
+  if(S.company)ev.push({d:(30-S.day%30)%30,t:'📋 تقرير شركتك ربع السنوي'});
+  if(S.ins&&S.ins.until>=S.day)ev.push({d:S.ins.until-S.day,t:'🛡️ انتهاء تغطية التأمين'});
+  ev.push({d:0,t:'🎰 سحب اليانصيب اليومي — نهاية اليوم'});
+  return ev.sort((a,b)=>a.d-b.d).slice(0,6);
+}
+function renderEconCal(){
+  const el=$('econCal');if(!el)return;
+  el.innerHTML=econEvents().map(e=>'<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;border-bottom:1px solid var(--line)"><span>'+e.t+'</span><b style="color:'+(e.d===0?'var(--gold)':'var(--dim)')+'">'+(e.d===0?'اليوم':'بعد '+e.d+' يوم')+'</b></div>').join('');
 }
 function renderGEvent(){
   const cd=$('gEventCard');if(!cd)return;
@@ -2697,6 +2789,8 @@ if(location.hash==='#test'){
     sel=ak;$('qty').value=5;buy();
     renderTA();
     ok('تحليل فني يعرض مؤشرات',$('taKpis').innerHTML.includes('RSI'));
+    ok('بولينجر وماكد معروضان',$('taKpis').innerHTML.includes('بولينجر')&&$('taKpis').innerHTML.includes('ماكد'));
+    ok('رسم بياني للسعر موجود',!!$('taChart'));
     ok('إشارة فنية',$('taSignal').textContent.length>3);
     ok('أداء الممتلكات يعرض المراكز',$('taPl').querySelector('tbody').innerHTML.includes(S.assets[ak].name));
     // تعدين الكريبتو
@@ -2804,6 +2898,26 @@ if(location.hash==='#test'){
     // زر تخطي اليوم
     const sd0=S.day;$('btnSkipDay').click();
     ok('زر تخطي اليوم',S.day===sd0+1&&S.hour===0);
+    // التقويم الاقتصادي
+    renderEconCal();
+    const evs=econEvents();
+    ok('تقويم اقتصادي يعمل',$('econCal').innerHTML.includes('موسم الأرباح')&&evs.length>=3);
+    ok('ترتيب التقويم صحيح',evs.every((e,i)=>i===0||evs[i-1].d<=e.d));
+    // صندوق التحوط
+    const nwH0=S.nwHist.slice(),dayH0=S.day;
+    S.day=7;renderHF();
+    ok('بطاقة الصندوق تعرض',$('hfBody').innerHTML.length>10);
+    S.hf={on:true,capital:250000,hwm:250000,fees:0,streak:0};
+    const nwNowH=netWorth(),cashH0=S.cash;
+    S.nwHist=[nwNowH*0.95,nwNowH*0.9];endOfDay();
+    ok('رسوم أداء الصندوق اتخصمت',S.hf.fees>0&&S.cash>cashH0);
+    ok('HWM اتحدث',Math.abs(S.hf.hwm-S.hf.capital)<1);
+    const capH0=S.hf.capital;
+    S.nwHist=[nwNowH*0.5,netWorth()/0.9];S.hf.streak=2;
+    endOfDay();
+    ok('سحب المستثمرين بعد ٣ خسارات',S.hf.capital<capH0*0.75&&S.hf.streak===0);
+    S.hf={on:false,capital:0,hwm:0,fees:0,streak:0};S.nwHist=nwH0;S.day=dayH0;
+    renderAll();
     save();ok('حفظ',!!localStorage.getItem('econLive1'));
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
   }catch(e){out.push('ERROR '+(e&&e.message));}
