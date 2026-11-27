@@ -2,6 +2,8 @@ if(location.hash==='#test'){
   const out=[];const ok=(n,c)=>out.push((c?'PASS':'FAIL')+' '+n);
   try{
     
+    localStorage.removeItem('econLive1');S=freshState();renderAll();
+    
     sel='س:نخبة تك';const cash0=S.cash;$('qty').value=10;buy();
     ok('شراء 10 أسهم',S.assets[sel].held===10&&S.cash<cash0);
     $('qty').value=5;sell();
@@ -1065,8 +1067,9 @@ if(location.hash==='#test'){
     }
     renderAll();
     save();ok('حفظ',!!localStorage.getItem('econLive1'));
+    localStorage.removeItem('econLive1');S=freshState();renderAll();
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
   }catch(e){out.push('ERROR '+(e&&e.message));}
   const d=document.createElement('pre');d.id='testout';d.textContent=out.join('\n');document.body.appendChild(d);
   document.title=out.some(l=>l.startsWith('FAIL')||l.startsWith('ERROR'))?'TEST-FAIL':'TEST-OK';
-}
+       }
