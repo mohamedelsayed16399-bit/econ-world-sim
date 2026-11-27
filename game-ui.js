@@ -1,3 +1,11 @@
+function closeMargin(forced){
+  const m=S.marginPos;if(!m)return 0;
+  const a=S.assets[m.sym];if(!a){S.marginPos=null;return 0;}
+  const equity=m.qty*a.price-m.debt;
+  S.cash+=equity;
+  S.marginPos=null;
+  return equity;
+}
 function renderBench(){
   const el=$('benchBar');if(!el)return;
   let s=0,n=0;
@@ -79,6 +87,89 @@ function renderPrestige(){
   el.innerHTML='نجومك: '+('⭐'.repeat(S.prestige||0)||'لا شيء بعد')+'<br>مضاعف أرباحك الحالي: ×'+pmult().toFixed(2)+'<br>الرتبة الجاية تحتاج صافي ثروة '+fmtD(need)+' — عندك '+fmtD(nw);
   $('btnPrestige').disabled=nw<need;
   $('btnPrestige').style.opacity=nw<need?0.5:1;
+}
+
+function careOf(c){
+  if(!c)return null;
+  if(!c.care)c.care={agents:0,csat:70,tickets:0,resolved:0,backlog:0,trained:0};
+  return c.care;
+}
+function careCost(c){
+  const k=c&&c.care;
+  return k?Math.round((k.agents||0)*900):0;
+}
+function careTick(c,sold){
+  const k=careOf(c);
+  if(!k)return 70;
+  const missed=(c.inv&&c.inv.missed)||0;
+  const tickets=Math.round((sold||0)*0.02+missed*0.08+(c.workers||0)*0.02);
+  const open=tickets+(k.backlog||0);
+  const cap=(k.agents||0)*22*(0.6+Math.min(0.5,(c.morale||60)/200));
+  const resolved=Math.min(open,Math.round(cap));
+  k.backlog=Math.max(0,open-resolved);
+  k.tickets=tickets;k.resolved=resolved;
+  const ratio=open>0?resolved/open:1;
+  const target=Math.max(5,Math.min(100,45+(c.quality||0)*0.35+ratio*25-(c.crisis?12:0)-Math.min(25,(k.backlog||0)*0.15)+(k.trained||0)));
+  k.csat=Math.max(0,Math.min(100,(k.csat==null?70:k.csat)+(target-k.csat)*0.15));
+  return k.csat;
+}
+function careDemandF(c){
+  const k=c&&c.care;
+  if(!k)return 1;
+  return Math.max(0.75,0.85+(k.csat||70)/300);
+}
+function careChurnF(c){
+  const k=c&&c.care;
+  if(!k)return 1;
+  return Math.max(0.6,1+((60-(k.csat||70))/120));
+}
+function hireCare(n){
+  const c=S.company;if(!c)return false;
+  const k=careOf(c);
+  const before=k.agents||0;
+  const target=Math.max(0,Math.min(40,before+n));
+  if(target===before)return false;
+  if(n>0){
+    const cost=Math.round(1500*n);
+    if(c.cash<cost)return false;
+    c.cash-=cost;
+  }
+  k.agents=target;
+  toast((n>0?'🧑‍💻 عيّنت ':'🚪 سرّحت ')+Math.abs(target-before)+' من فريق الدعم');
+  save();renderAll();
+  return true;
+}
+function trainCare(){
+  const c=S.company;if(!c)return false;
+  const k=careOf(c);
+  if(c.cash<5000)return false;
+  if((k.trained||0)>=10)return false;
+  c.cash-=5000;
+  k.trained=(k.trained||0)+1;
+  k.csat=Math.min(100,(k.csat||70)+4);
+  toast('🎓 تدريب فريق الدعم — رضا العملاء +4');
+  save();renderAll();
+  return true;
+}
+function renderCare(){
+  const b=$('careBody');if(!b)return;
+  const c=S.company;
+  if(!c){b.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا.</div>';return;}
+  const k=careOf(c);
+  const csat=Math.round(k.csat||70);
+  const col=csat>=75?'var(--up)':csat>=55?'var(--gold)':'var(--down)';
+  const mood=csat>=75?'ممتاز 😀':csat>=55?'مقبول 😐':'سيئ 😠';
+  let h='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><b style="font-size:13.5px">رضا العملاء: <span style="color:'+col+'">'+csat+'٪ — '+mood+'</span></b><span style="font-size:12px;color:var(--dim)">فريق الدعم: '+(k.agents||0)+' · تكلفة '+fmtD(careCost(c))+'/يوم</span></div>';
+  h+='<div style="height:9px;background:#1a2340;border-radius:6px;margin:8px 0 10px"><div style="width:'+csat+'%;height:100%;border-radius:6px;background:'+col+'"></div></div>';
+  h+='<div class="kpis">'+kpi('تذاكر اليوم',k.tickets||0)+kpi('تم حلها',k.resolved||0)+kpi('متأخرة',Math.round(k.backlog||0))+'</div>';
+  h+='<div class="tradeRow" style="margin-top:10px">'+
+     '<button class="btnShort" onclick="hireCare(1)" '+(c.cash<1500||(k.agents||0)>=40?'disabled':'')+'>➕ تعيين موظف دعم (١٬٥٠٠)</button>'+
+     '<button class="btnGhost" onclick="hireCare(5)" '+(c.cash<7500||(k.agents||0)>=40?'disabled':'')+'>➕ ٥ موظفين (٧٬٥٠٠)</button>'+
+     '<button class="btnGhost" onclick="hireCare(-1)" '+((k.agents||0)<=0?'disabled':'')+'>➖ تسريح</button>'+
+     '<button class="btnGhost" onclick="trainCare()" '+(c.cash<5000||(k.trained||0)>=10?'disabled':'')+'>🎓 تدريب (٥٬٠٠٠)</button>'+
+     '</div>';
+  h+='<div style="font-size:11.5px;color:var(--dim);margin-top:8px">أثر الرضا على الطلب: '+Math.round((careDemandF(c)-1)*100)+'٪ · على فقد المشتركين: '+Math.round((careChurnF(c)-1)*100)+'٪ · تدريبات: '+(k.trained||0)+'/10</div>';
+  b.innerHTML=h;
 }
 $('btnPrestige').onclick=()=>{
   if(netWorth()<20000000)return;
@@ -509,6 +600,40 @@ if(location.hash==='#test'){
     S.nextNews={i:0,h:5};S.tipUsed=0;S.cash+=10000;
     $('btnTip').click();
     ok('معلومة مسرّبة',S.tips===1&&$('tipOut').textContent.length>10);
+    
+    if(S.company){
+      const cc=S.company;const dayA=S.day;
+      RNG=()=>0.5;
+      S.pubAuc=null;S.nextAuc=dayA;
+      const a=genPubAuc();
+      ok('مزاد جديد بيتولد',!!a&&a.cur>0&&a.base>0&&a.max>a.base&&a.endDay===S.day+5);
+      S.cash=500000;const cashB=S.cash;
+      S.pubAuc.strength=0;RNG=()=>0.99;
+      ok('المزايدة تخصم الكاش',bidAuc()===true&&S.cash<cashB&&S.pubAuc.leader==='me');
+      ok('مش تزايد وانت متصدر',bidAuc()===false);
+      S.pubAuc.leader='npc';S.pubAuc.paid=0;
+      const cashC=S.cash;RNG=()=>0.0;
+      const bidOk=bidAuc();const paidNow=S.pubAuc.leader==='me'?S.pubAuc.paid:0;
+      ok('رد المنافس يرجّع الفلوس',bidOk===true&&S.pubAuc.leader==='npc'&&paidNow===0&&S.cash<=cashC);
+      RNG=()=>0.5;
+      S.pubAuc.leader='me';S.pubAuc.kind='patent';S.pubAuc.done=false;S.pubAuc.endDay=S.day;
+      cc.quality=40;const won0=cc.aucWon||0;
+      settleAuc();
+      ok('الفوز ببراءة يزوّد الجودة',cc.quality>40&&S.pubAuc.done===true&&(cc.aucWon||0)>won0);
+      S.pubAuc={item:'فرع جاهز',ic:'🏬',kind:'branch',d:'',rival:'منافس',base:1000,cur:1000,max:2000,leader:'me',paid:0,bids:[],endDay:S.day,done:false,strength:0.2};
+      const inc0=cc.aucIncome||0;settleAuc();
+      ok('الفوز بفرع يزوّد الدخل اليومي',(cc.aucIncome||0)>inc0);
+      const val0=companyValue();
+      S.pubAuc={item:'حصة',ic:'📊',kind:'stake',d:'',rival:'منافس',base:1000,cur:10000,max:20000,leader:'me',paid:0,bids:[],endDay:S.day,done:false,strength:0.2};
+      settleAuc();
+      ok('الفوز بحصة يزوّد قيمة الشركة',companyValue()>val0);
+      S.pubAuc={item:'x',ic:'🧪',kind:'patent',d:'',rival:'r',base:1000,cur:1000,max:2000,leader:'npc',paid:0,bids:[],endDay:S.day+5,done:false,strength:0.5};
+      S.cash=10;ok('مزايدة بدون كاش مرفوضة',bidAuc()===false);
+      S.cash=500000;S.pubAuc.leader='npc';S.pubAuc.endDay=S.day;
+      settleAuc();ok('المزاد بيرسّي على المتصدر',S.pubAuc.done===true);
+      renderAuc();ok('بطاقة المزاد ترسم',$('aucBody').innerHTML.length>30);
+      S.day=dayA;S.nextAuc=0;S.pubAuc=null;RNG=Math.random;
+    }
     
     if(S.company){
       const cc=S.company;const dayT=S.day;
@@ -1234,10 +1359,175 @@ if(location.hash==='#test'){
       renderAll();
       ok('بطاقة الفريق ترسم في الواجهة',$('hrBody').innerHTML.length>50);
     }
+    
+    if(S.company){
+      const dayW=S.day;const RcW=RNG;
+      S.company.cash=300000;S.company.rep=60;S.company.brand=60;S.company.workers=100;S.company.morale=60;
+      S.rival={name:'منافس اختبار',strength:1.1};
+      S.war={active:null,next:S.day+100,shield:0,shieldDays:0,wins:0,losses:0,log:[],blocked:0};
+      RNG=()=>0.5;
+      const mv=launchWarMove('price');
+      ok('هجوم منافس بيتولّد',!!mv&&mv.k==='price'&&mv.left>0&&!!S.war.active);
+      ok('حرب الأسعار بتقلل الطلب',warDemandF()<1&&warDemandF()>=0.6);
+      const cashW0=S.company.cash;
+      ok('الدفاع بيخصم من خزينة الشركة',warDefend()===true&&S.company.cash<cashW0&&S.war.shield>0);
+      ok('الدرع بيقلل أثر الهجوم',warDemandF()>0.9);
+      S.war.active.left=1;S.war.shield=1;S.war.shieldDays=5;RNG=()=>0.1;
+      warTick();
+      ok('الهجوم بيتصد بنجاح',S.war.active===null&&S.war.wins>0&&S.war.blocked>0);
+      S.war.active=null;S.war.shield=0;S.war.shieldDays=0;RNG=()=>0.5;
+      launchWarMove('squeeze');
+      ok('حصار التوريد بيرفع التكلفة',warCostF()>1);
+      S.war.active=null;S.company.workers=100;
+      launchWarMove('raid');
+      ok('سطو الكفاءات بينقص العمال',S.company.workers<100);
+      S.war.active=null;S.company.brand=60;
+      launchWarMove('smear');
+      ok('حملة التشويه بتضرب العلامة',S.company.brand<60);
+      S.war.active={k:'price',n:'حرب أسعار',ic:'🏷️',d:'',left:1,hit:0.14};
+      S.war.shield=0;S.war.shieldDays=0;S.company.rep=60;S.company.brand=60;
+      const repW0=S.company.rep;RNG=()=>0.99;
+      warTick();
+      ok('الهجوم غير الصد بيضرب السمعة',S.war.losses>0&&S.company.rep<repW0&&S.war.active===null);
+      S.rival=null;S.war.active={k:'price',n:'x',ic:'',d:'',left:3,hit:0.1};
+      warTick();
+      ok('بدون منافس مفيش حرب',S.war.active===null);
+      S.rival={name:'منافس اختبار',strength:1};
+      renderWar();
+      ok('بطاقة الحرب ترسم',$('warBody').innerHTML.length>40&&$('warBody').innerHTML.includes('منافس اختبار'));
+      S.company.cash=1000;
+      ok('الدفاع محتاج كاش',warDefend()===false);
+      S.company.cash=300000;
+      S.war.active=null;S.war.next=S.day+100;
+      const cashW1=S.company.cash;
+      RNG=()=>0.5;const h0=S.war.losses+S.war.wins;
+      warTick();
+      ok('مفيش هجوم قبل ميعاده',S.war.losses+S.war.wins===h0&&S.company.cash===cashW1);
+      S.day=dayW;RNG=RcW;
+    }
+    
+    if(S.company){
+      const dayA2=S.day;const RcA=RNG;
+      const cc=S.company;
+      cc.cash=500000;cc.rep=70;cc.brand=50;cc.workers=90;
+      S.allies={list:[],pact:null,heat:0,fines:0,log:[]};
+      S.corp=null;initCorp();
+      ok('فرصة التحالف بين ٥٪ و٩٥٪',(function(){const c1=allyChance(S.corp[0]);return c1>=0.05&&c1<=0.95;})());
+      RNG=()=>0.0;
+      const cashA=cc.cash;const corp0=S.corp[0];
+      ok('عرض التحالف ينجح ويخصم الرسوم',offerAlliance(0)===true&&S.allies.list.length===1&&cc.cash<cashA);
+      ok('التحالف بيرفع الطلب',allyDemandF()>1);
+      ok('التحالف بيظهر في القائمة',!!allyOf(corp0.n));
+      ok('مش تحالف مكرر',offerAlliance(0)===false);
+      RNG=()=>0.0;
+      offerAlliance(1);offerAlliance(2);
+      ok('الحد الأقصى ٣ تحالفات',S.allies.list.length===3&&offerAlliance(3)===false);
+      const A=S.allies;
+      A.list=[{name:'أ',trait:'plant',traitN:'مصنع',ic:'🏭',since:S.day},{name:'ب',trait:'rnd',traitN:'بحوث',ic:'🔬',since:S.day}];
+      ok('شريك المصنع بيخفض التكلفة',allyCostF()<1);
+      ok('شريك البحوث بيزوّد الجودة',allyQualityBonus()>0);
+      const cashC2=cc.cash;
+      ok('الكارتيل محتاج تحالفين ويكلف',formCartel()===true&&!!A.pact&&cc.cash<cashC2);
+      ok('الكارتيل بيرفع الطلب أكتر',allyDemandF()>1.1);
+      ok('مش كارتيلين',formCartel()===false);
+      A.heat=60;cc.rep=70;const cashF=cc.cash;
+      RNG=()=>0.0;allyTick();
+      ok('الرقابة بتفرض غرامة وتفك الكارتيل',A.pact===null&&cc.cash<cashF&&A.fines>0&&cc.rep<70);
+      A.list=[{name:'أ',trait:'dist',traitN:'توزيع',ic:'🚚',since:S.day},{name:'ب',trait:'base',traitN:'عملاء',ic:'👥',since:S.day}];
+      RNG=()=>0.0;formCartel();
+      ok('فض الكارتيل يدويًا',dissolveCartel('قرار يدوي')===true&&S.allies.pact===null);
+      const repB=cc.rep;
+      ok('فض التحالف بيخصم سمعة',breakAlliance('أ')===true&&cc.rep<repB&&S.allies.list.length===1);
+      S.rival={name:'ب',strength:1};
+      S.war.active=null;S.war.next=S.day-1;
+      RNG=()=>0.0;
+      warTick();
+      ok('الشريك المتحالف مابيهاجمكش',S.war.active===null);
+      S.rival={name:'منافس اختبار',strength:1};
+      renderAlly();
+      ok('بطاقة التحالفات ترسم',$('allyBody').innerHTML.length>60&&$('allyBody').innerHTML.includes('تحالفاتك'));
+      S.allies={list:[],pact:null,heat:0,fines:0,log:[]};
+      S.war.next=S.day+100;
+      S.day=dayA2;RNG=RcA;
+    }
+    
+    if(S.company){
+      const cc=S.company;const RcS=RNG;
+      cc.cash=300000;cc.brand=60;cc.rep=70;cc.lastYearProfit=0;
+      cc.subs={active:false,plan:null,members:0,price:0,mrr:0,churn:0,total:0,launchDay:0};
+      RNG=()=>0.5;
+      cc.quality=30;
+      ok('خطة بريميوم بتحتاج جودة',launchSub('premium')===false&&cc.subs.active===false);
+      cc.quality=80;
+      ok('تشغيل خطة أساسي',launchSub('basic')===true&&cc.subs.active===true&&cc.subs.plan==='basic');
+      const sb=cc.subs;
+      const m0=sb.members;
+      for(let i=0;i<30;i++)subTick(cc);
+      ok('المشتركين بينموا مع الوقت',sb.members>m0&&sb.members>0);
+      ok('الإيراد المتكرر محسوب',sb.mrr>0&&Math.abs(sb.mrr-sb.members*25)<=25);
+      const revS=subTick(cc);
+      ok('الاشتراك بيضيف دخل يومي',revS>0);
+      ok('الاشتراك بيرفع قيمة الشركة',companyValue()>=cc.cash+Math.round((sb.mrr||0)*6)-1);
+      cc.quality=10;const ch0=sb.churn||0;
+      subTick(cc);
+      ok('الجودة الضعيفة بترفع الفقد',sb.churn>ch0);
+      const mem0=sb.members;
+      cc.quality=80;
+      ok('تبديل الخطة بيحافظ على جزء من المشتركين',launchSub('pro')===true&&sb.plan==='pro'&&sb.members<=mem0&&sb.members>=Math.round(mem0*0.5));
+      ok('إيقاف الاشتراكات',stopSub()===true&&sb.active===false&&sb.mrr===0&&sb.members===0);
+      ok('مش إيقاف مرتين',stopSub()===false);
+      sb.active=true;sb.plan='basic';sb.members=500;sb.mrr=12500;
+      renderSub();
+      ok('بطاقة الاشتراكات ترسم',$('subBody').innerHTML.length>60&&$('subBody').innerHTML.includes('مشتركون'));
+      renderCompany();
+      ok('المشتركون بيظهروا في المؤشرات',$('coKpis').innerHTML.includes('مشتركون'));
+      cc.subs={active:false,plan:null,members:0,price:0,mrr:0,churn:0,total:0,launchDay:0};
+      RNG=RcS;
+    }
+    
+    if(S.company){
+      const cc=S.company;const RcC=RNG;
+      cc.cash=300000;cc.quality=70;cc.morale=60;cc.workers=90;
+      cc.care={agents:0,csat:70,tickets:0,resolved:0,backlog:0,trained:0};
+      RNG=()=>0.5;
+      ok('حالة الدعم الافتراضية',careOf(cc).csat===70&&careCost(cc)===0);
+      const cs0=careOf(cc).csat;
+      careTick(cc,600);
+      ok('بدون فريق التذاكر بتتراكم',careOf(cc).backlog>0);
+      ok('تراكم التذاكر بيضرب الرضا',careOf(cc).csat<cs0);
+      const cashH=cc.cash;
+      ok('تعيين موظف دعم بيخصم التكلفة',hireCare(1)===true&&careOf(cc).agents===1&&cc.cash===cashH-1500);
+      ok('تكلفة الدعم اليومية محسوبة',careCost(cc)===900);
+      hireCare(5);
+      ok('تعيين ٥ موظفين',careOf(cc).agents===6);
+      const bk0=careOf(cc).backlog;
+      careTick(cc,600);
+      ok('فريق أكبر بيحل تذاكر أكتر',careOf(cc).resolved>0&&careOf(cc).backlog<bk0);
+      const cs1=careOf(cc).csat;
+      for(let i=0;i<12;i++)careTick(cc,200);
+      ok('الرضا بيتحسن مع الحل',careOf(cc).csat>cs1);
+      const cashT=cc.cash;
+      ok('التدريب بيخصم ويرفع الرضا',trainCare()===true&&cc.cash===cashT-5000&&careOf(cc).trained===1);
+      cc.cash=1000;
+      ok('التدريب محتاج كاش',trainCare()===false);
+      cc.cash=300000;
+      ok('التسريح بينقص الفريق',hireCare(-2)===true&&careOf(cc).agents===4);
+      cc.care.agents=0;
+      ok('مش تسريح تحت الصفر',hireCare(-1)===false);
+      ok('الرضا بيأثر على الطلب',careDemandF(cc)>=0.75&&careDemandF(cc)<=1.2);
+      cc.care.csat=20;
+      ok('رضا منخفض بيرفع الفقد',careChurnF(cc)>1);
+      cc.care.csat=95;
+      ok('رضا عالي بيقلل الفقد',careChurnF(cc)<1);
+      renderCare();
+      ok('بطاقة الدعم ترسم',$('careBody').innerHTML.length>80&&$('careBody').innerHTML.includes('رضا العملاء'));
+      cc.care={agents:0,csat:70,tickets:0,resolved:0,backlog:0,trained:0};
+      RNG=RcC;
+    }
     renderAll();
     save();ok('حفظ',!!localStorage.getItem('econLive1'));
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
   }catch(e){out.push('ERROR '+(e&&e.message));}
   const d=document.createElement('pre');d.id='testout';d.textContent=out.join('\n');document.body.appendChild(d);
   document.title=out.some(l=>l.startsWith('FAIL')||l.startsWith('ERROR'))?'TEST-FAIL':'TEST-OK';
-  }
+                }
