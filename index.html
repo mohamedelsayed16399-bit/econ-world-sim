@@ -1072,6 +1072,24 @@ function hireStaff(k){
   toast('🧑‍💼 '+(lv?'ترقية':'تعيين')+': '+def.n+' — المستوى '+(lv+1));
   renderCompany();renderHR();
 }
+function strikeAccept(){
+  const c=S.company;if(!c||!c.strike)return;
+  c.wage=c.strike.asked/100;c.morale=Math.min(100,c.morale+8);
+  pushNews(S,'✅ اتفاق مع العمال في "'+c.name+'" — الرواتب رُفعت إلى '+c.strike.asked+'%',0.01,false,true);
+  S.achv.strike=1;
+  c.strike=null;toast('✅ تم الاتفاق ورفع الرواتب');
+  renderHR();renderCompany();
+}
+function strikeReject(){
+  const c=S.company;if(!c||!c.strike)return;
+  const cost=Math.round(c.workers*150);
+  if(c.cash<cost)return toast('❌ الخزينة لا تكفي لتعيين بدلاء ('+fmtD(cost)+')');
+  c.cash-=cost;c.morale=Math.max(0,c.morale-10);c.quality=Math.max(0,c.quality-5);
+  pushNews(S,'⚠️ إدارة "'+c.name+'" عيّنت بدلاء وأنهت الإضراب',-0.015,true,true);
+  S.achv.strike=1;
+  c.strike=null;toast('⚠️ انتهى الإضراب بتعيين بدلاء');
+  renderHR();renderCompany();
+}
 function runCompany(){
   const c=S.company;
   if(!c.up)c.up={line:0,auto:0,brand:0};
@@ -1084,6 +1102,21 @@ function runCompany(){
     c.workers-=q;c.quits=(c.quits||0)+q;
     toast('🚪 '+q+' عامل استقالوا — الرواتب منخفضة!');
   }
+  // إضراب عمالي عند رضا منخفض جدًا
+  if(!c.strike&&c.morale<30&&c.workers>5&&RNG()<0.15){
+    c.strike={days:0,asked:Math.min(160,Math.round((c.wage+0.2)*100))};
+    pushNews(S,'✊ إضراب في "'+c.name+'" — العمال يطالبون برفع الرواتب إلى '+c.strike.asked+'%',-0.01,true,true);
+    toast('✊ إضراب! العمال يطالبون برواتب '+c.strike.asked+'%');
+  }
+  if(c.strike){
+    c.strike.days=(c.strike.days||0)+1;
+    if(c.strike.days>=5){
+      c.strike=null;c.morale=Math.max(0,c.morale-5);
+      pushNews(S,'انتهى إضراب "'+c.name+'" دون اتفاق والعمال عادوا ساخطين',-0.005,false,true);
+      toast('انتهى الإضراب دون اتفاق');
+    }
+  }
+  const strikeF=c.strike?0.35:1;
   const prod=0.72+c.morale/100*0.56;
   const sectorMood=avgSectorSent(c.sector);
   const fairPrice=40*(1+sectorMood)+c.quality*1.5;
@@ -1093,7 +1126,7 @@ function runCompany(){
   // المنافس يضغط على الطلب
   const rivalF=S.rival?Math.max(0.5,1-S.rival.strength*0.16):1;
   const salesBoost=1+(c.staff.sales||0)*0.08;
-  const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rivalF*salesBoost*prod*rnd(0.85,1.15));
+  const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rivalF*salesBoost*strikeF*prod*rnd(0.85,1.15));
   const sold=Math.min(demand,c.workers*10*capacity*prod);
   const revenue=sold*c.price;
   const wageBill=c.workers*22*c.wage;
@@ -1766,8 +1799,17 @@ function renderHR(){
   const m=Math.round(c.morale);
   const face=m>=80?'😄':m>=55?'🙂':m>=35?'😐':'😠';
   const col=m>=55?'var(--up)':m>=35?'#f59e0b':'var(--dn)';
+  let sb='';
+  if(c.strike){
+    sb+='<div style="background:rgba(239,68,68,.12);border:1px solid var(--dn);border-radius:12px;padding:10px;margin-bottom:10px">'+
+      '<div style="font-weight:700;color:var(--dn);margin-bottom:4px">✊ إضراب عمالي — اليوم '+c.strike.days+' من 5</div>'+
+      '<div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">الإنتاج متوقف جزئيًا (الطلب -65%). المطلب: رواتب '+c.strike.asked+'%.</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btnGhost" onclick="strikeAccept()">✅ قبول ورفع الرواتب لـ'+c.strike.asked+'%</button>'+
+      '<button class="btnGhost" onclick="strikeReject()">👷 رفض وتعيين بدلاء ('+fmtD(Math.round(c.workers*150))+')</button></div></div>';
+  }
   const RW='display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px';
   let h='<div style="'+RW+'"><span>رضا الفريق '+face+'</span><b style="color:'+col+'">'+m+'%</b></div>';
+  h=sb+h;
   h+='<div style="height:9px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:6px 0 12px"><div style="height:100%;width:'+m+'%;background:'+col+'"></div></div>';
   h+='<div class="sliderRow"><label><span>مستوى الرواتب مقابل السوق</span><b>'+Math.round(c.wage*100)+'%</b></label><input type="range" id="sWage" min="60" max="160" step="5" value="'+Math.round(c.wage*100)+'"></div>';
   h+='<div style="'+RW+'"><span>فاتورة الأجور اليومية</span><b>'+fmtD(Math.round(c.workers*22*c.wage))+'</b></div>';
@@ -1816,6 +1858,7 @@ const ACHV=[
  ['shark','🦈','قرش السوق','استحوذ على شركة منافسك',()=>!!(S.achv&&S.achv.shark)],
  ['hr','🧑‍💼','قائد فريق','رضا الفريق ٩٠٪ أو أكثر',()=>!!S.company&&S.company.morale>=90],
  ['staff','🎓','طاقم نخبة','طاقم الإدارة بمستوى ٩',()=>!!S.company&&staffLevel(S.company)>=9],
+ ['strike','✊','مفاوض','أنهيت إضرابًا عماليًا',()=>!!(S.achv&&S.achv.strike)],
 ];
 function checkAchv(){
   ACHV.forEach(a=>{if(!S.achv[a[0]]&&a[4]()){S.achv[a[0]]=1;toast('🏅 إنجاز جديد: '+a[2]);}});
@@ -3227,6 +3270,28 @@ if(location.hash==='#test'){
       ok('الرضا العالي يرفع المبيعات',soldHi>soldLo&&soldBase>soldLo);
       ok('مدير المبيعات يرفع الطلب',soldMgr>soldLo);
       ok('مهندس الجودة يرفع الجودة أسرع',qEng>qNoEng);
+      // إضراب عمالي
+      cc.morale=10;cc.wage=0.7;cc.workers=60;cc.cash=200000;cc.strike=null;cc.staff={eng:0,sales:0,mkt:0};cc.quality=40;
+      let RS=RNG;RNG=()=>0.01;runCompany();RNG=RS;
+      ok('إضراب يبدأ عند رضا منخفض',!!cc.strike&&cc.strike.asked>=90);
+      RNG=()=>0.5;
+      cc.morale=60;cc.price=40;cc.rd=0;cc.marketing=0;cc.staff={eng:0,sales:0,mkt:0};
+      cc.strike=null;runCompany();const sNo=cc.todaySold;
+      cc.strike={days:1,asked:120};runCompany();const sYes=cc.todaySold;
+      RNG=RS;
+      ok('الإضراب يقلل الطلب',sNo>sYes);
+      cc.strike={days:1,asked:120};cc.wage=0.7;cc.morale=20;
+      strikeAccept();
+      ok('قبول المطلب يرفع الرواتب',cc.wage===1.2&&!cc.strike&&cc.morale>20);
+      cc.strike={days:1,asked:140};cc.wage=1;cc.morale=40;cc.quality=50;cc.workers=60;
+      const cashR=cc.cash;strikeReject();
+      ok('رفض الإضراب بتعيين بدلاء',!cc.strike&&cc.cash===cashR-9000&&Math.round(cc.quality)===45);
+      cc.strike={days:0,asked:120};cc.morale=50;cc.wage=1;cc.cash=400000;
+      for(let i=0;i<5;i++)runCompany();
+      ok('الإضراب ينتهي تلقائيًا بعد ٥ أيام',!cc.strike);
+      cc.strike={days:2,asked:130};renderHR();
+      ok('لافتة الإضراب تظهر في البطاقة',$('hrBody').innerHTML.includes('إضراب عمالي'));
+      cc.strike=null;cc.wage=1;cc.morale=60;renderHR();
       const keepC=S.company;
       S.company={name:'قديمة',sector:'تقنية',cash:1000,price:40,rd:0,marketing:0,workers:10,quality:10,track:[]};
       migrate();
@@ -3247,4 +3312,4 @@ if(location.hash==='#test'){
 }
 </script>
 </body>
-</html>
+  </html>
