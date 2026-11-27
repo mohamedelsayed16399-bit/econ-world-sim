@@ -390,6 +390,11 @@ tr.row:hover,tr.row.sel{background:#182442}
       <h3 style="margin-top:14px">ترقيات الشركة</h3>
       <div class="tradeRow" id="upgRow"></div>
     </div>
+    <div class="card" id="hrCard">
+      <h3>🧑‍💼 فريق العمل والرواتب</h3>
+      <p style="font-size:12.5px;color:var(--dim);margin:4px 0 10px">رضا الفريق يحدد إنتاجيتهم. الرواتب المرتفعة ترفع الرضا والإنتاج، والمنخفضة توفّر اليوم لكن العمال يستقيلون.</p>
+      <div id="hrBody"></div>
+    </div>
     <div class="card" id="confCard">
       <h3>🎤 مؤتمر صحفي (للشركات المدرجة)</h3>
       <div id="confBody"></div>
@@ -592,6 +597,12 @@ function migrate(){
   if(S.tips==null)S.tips=0;if(S.tipUsed==null)S.tipUsed=0;
   if(!S.orders)S.orders=[];if(!S.alerts)S.alerts=[];
   if(!S.macro)S.macro={phase:0,days:8};
+  if(S.company){
+    if(S.company.morale==null)S.company.morale=60;
+    if(S.company.wage==null)S.company.wage=1;
+    if(!S.company.staff)S.company.staff={eng:0,sales:0,mkt:0};
+    STAFF.forEach(x=>{if(S.company.staff[x.k]==null)S.company.staff[x.k]=0;});
+  }
   if(!S.stats)S.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};
   if(S.stats.worstTrade==null)S.stats.worstTrade=0;
   if(S.snd==null)S.snd=true;
@@ -1042,21 +1053,51 @@ function fireNews(idx){
   refreshNewsUI();
 }
 /* الشركة */
+const STAFF=[
+ {k:'eng',ic:'🧪',n:'مهندس جودة',base:12000,pay:180,d:'+١٫٢ جودة يوميًا لكل مستوى'},
+ {k:'sales',ic:'📞',n:'مدير مبيعات',base:15000,pay:220,d:'+٨٪ طلب لكل مستوى'},
+ {k:'mkt',ic:'📣',n:'خبير تسويق',base:10000,pay:150,d:'+١٢٪ قوة تسويق لكل مستوى'}
+];
+function staffCost(c){let s=0;const st=c&&c.staff||{};STAFF.forEach(x=>s+=(st[x.k]||0)*x.pay);return s;}
+function staffLevel(c){let s=0;const st=c&&c.staff||{};STAFF.forEach(x=>s+=(st[x.k]||0));return s;}
+function hireStaff(k){
+  const c=S.company;if(!c)return;
+  const def=STAFF.find(x=>x.k===k);if(!def)return;
+  if(!c.staff)c.staff={eng:0,sales:0,mkt:0};
+  const lv=c.staff[k]||0;
+  if(lv>=5)return toast('الفريق في أقصى مستوى');
+  const cost=def.base*(lv+1);
+  if(c.cash<cost)return toast('❌ خزينة الشركة لا تكفي ('+fmtD(cost)+')');
+  c.cash-=cost;c.staff[k]=lv+1;
+  toast('🧑‍💼 '+(lv?'ترقية':'تعيين')+': '+def.n+' — المستوى '+(lv+1));
+  renderCompany();renderHR();
+}
 function runCompany(){
   const c=S.company;
   if(!c.up)c.up={line:0,auto:0,brand:0};
+  if(c.morale==null)c.morale=60;if(c.wage==null)c.wage=1;if(!c.staff)c.staff={eng:0,sales:0,mkt:0};
+  STAFF.forEach(x=>{if(c.staff[x.k]==null)c.staff[x.k]=0;});
+  const mTarget=Math.max(0,Math.min(100,50+(c.wage-1)*70-Math.max(0,(c.workers-140)/6)));
+  c.morale=Math.max(0,Math.min(100,c.morale+(mTarget-c.morale)*0.12));
+  if(c.morale<25&&c.workers>5&&RNG()<0.3){
+    const q=Math.max(1,Math.round(c.workers*0.04));
+    c.workers-=q;c.quits=(c.quits||0)+q;
+    toast('🚪 '+q+' عامل استقالوا — الرواتب منخفضة!');
+  }
+  const prod=0.72+c.morale/100*0.56;
   const sectorMood=avgSectorSent(c.sector);
   const fairPrice=40*(1+sectorMood)+c.quality*1.5;
   const priceFactor=Math.max(0.05,1-(c.price-fairPrice)/fairPrice*0.8);
-  const marketing=Math.log(1+c.marketing/100)*(1+0.4*c.up.brand);
+  const marketing=Math.log(1+c.marketing/100)*(1+0.4*c.up.brand+(c.staff.mkt||0)*0.12);
   const capacity=1+0.5*c.up.line;
   // المنافس يضغط على الطلب
   const rivalF=S.rival?Math.max(0.5,1-S.rival.strength*0.16):1;
-  const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rivalF*rnd(0.85,1.15));
-  const sold=Math.min(demand,c.workers*10*capacity);
+  const salesBoost=1+(c.staff.sales||0)*0.08;
+  const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rivalF*salesBoost*prod*rnd(0.85,1.15));
+  const sold=Math.min(demand,c.workers*10*capacity*prod);
   const revenue=sold*c.price;
-  const wageBill=c.workers*22;
-  const costs=wageBill+c.rd+c.marketing+sold*c.price*0.35;
+  const wageBill=c.workers*22*c.wage;
+  const costs=wageBill+staffCost(c)+c.rd+c.marketing+sold*c.price*0.35;
   const profit=revenue-costs;
   const pFinal=profit>0?profit*pmult():profit;
   // أرباح الفروع حول العالم
@@ -1073,7 +1114,7 @@ function runCompany(){
   c.branchProfit=branchProfit;
   c.cash+=pFinal;
   c.todayRev=revenue;c.todayProfit=pFinal;c.todaySold=Math.round(sold);
-  c.quality=Math.min(100,c.quality+c.rd/4000+c.up.auto*0.05);
+  c.quality=Math.min(100,c.quality+c.rd/4000+c.up.auto*0.05+(c.staff.eng||0)*0.012);
   c.quality=Math.max(0,c.quality-0.05);
   c.track.push(profit);
   if(c.track.length>365)c.track.shift();
@@ -1095,7 +1136,8 @@ function quarterReport(){
   showModal('<h2>📊 التقرير ربع السنوي — '+c.name+'</h2>'+
     row('أيام التشغيل',q.length)+row('صافي ربح الربع',fmtD(rev))+
     row('قيمة الشركة التقديرية',fmtD(companyValue()))+row('الجودة',c.quality.toFixed(0)+'/100')+
-    row('العمال',c.workers)+
+    row('العمال',c.workers)+row('رضا الفريق',Math.round(c.morale)+'%')+
+    row('طاقم الإدارة',staffLevel(c)+'/15')+
     '<button class="bigBtn" style="width:100%;margin-top:14px" onclick="hideModal()">تمام</button>');
 }
 function row(a,b){return '<div class="row"><span>'+a+'</span><b>'+b+'</b></div>';}
@@ -1710,12 +1752,34 @@ function renderCompany(){
   $('coKpis').innerHTML=
     kpi('خزينة الشركة',fmtD(c.cash))+kpi('قيمة الشركة',fmtD(companyValue()))+
     kpi('مبيعات اليوم',c.todaySold||0)+kpi('ربح اليوم',fmtD(c.todayProfit||0))+
-    kpi('الجودة',c.quality.toFixed(0)+'/100')+kpi('العمال',c.workers);
+    kpi('الجودة',c.quality.toFixed(0)+'/100')+kpi('العمال',c.workers)+
+    kpi('رضا الفريق',Math.round(c.morale)+'%')+kpi('طاقم الإدارة',staffLevel(c)+'/15');
   $('vPrice').textContent=c.price+' د.';
   $('vRd').textContent=fmtD(c.rd);
   $('vMk').textContent=fmtD(c.marketing);
   $('vWk').textContent=c.workers;
   $('sPrice').value=c.price;$('sRd').value=c.rd;$('sMk').value=c.marketing;$('sWk').value=c.workers;
+}
+function renderHR(){
+  const c=S.company;const b=$('hrBody');if(!c||!b)return;
+  if(c.morale==null)c.morale=60;if(c.wage==null)c.wage=1;if(!c.staff)c.staff={eng:0,sales:0,mkt:0};
+  const m=Math.round(c.morale);
+  const face=m>=80?'😄':m>=55?'🙂':m>=35?'😐':'😠';
+  const col=m>=55?'var(--up)':m>=35?'#f59e0b':'var(--dn)';
+  let h='<div class="row"><span>رضا الفريق '+face+'</span><b style="color:'+col+'">'+m+'%</b></div>';
+  h+='<div style="height:9px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:6px 0 12px"><div style="height:100%;width:'+m+'%;background:'+col+'"></div></div>';
+  h+='<div class="sliderRow"><label><span>مستوى الرواتب مقابل السوق</span><b>'+Math.round(c.wage*100)+'%</b></label><input type="range" id="sWage" min="60" max="160" step="5" value="'+Math.round(c.wage*100)+'"></div>';
+  h+='<div class="row"><span>فاتورة الأجور اليومية</span><b>'+fmtD(Math.round(c.workers*22*c.wage))+'</b></div>';
+  h+='<div class="row"><span>رواتب طاقم الإدارة</span><b>'+fmtD(staffCost(c))+'</b></div>';
+  STAFF.forEach(x=>{
+    const lv=c.staff[x.k]||0;const cost=x.base*(lv+1);
+    const dots='●'.repeat(lv)+'○'.repeat(5-lv);
+    h+='<div class="row" style="align-items:center;gap:8px;flex-wrap:wrap"><span>'+x.ic+' '+x.n+' <b style="color:var(--accent);letter-spacing:1px">'+dots+'</b><br><span style="color:var(--dim);font-size:12px">'+x.d+'</span></span>'+
+      (lv>=5?'<b style="color:var(--up)">الحد الأقصى ✔</b>':'<button class="btnGhost" onclick="hireStaff(\''+x.k+'\')" '+(c.cash<cost?'disabled':'')+'>'+(lv?'ترقية':'تعيين')+' ('+fmtD(cost)+')</button>')+'</div>';
+  });
+  b.innerHTML=h;
+  const w=$('sWage');
+  if(w)w.oninput=()=>{S.company.wage=+w.value/100;renderHR();renderCompany();};
 }
 let secFilter=null;
 function renderIdx(){
@@ -1749,6 +1813,8 @@ const ACHV=[
  ['old','📅','المخضرم','العب ١٠٠ يوم',()=>S.day>=100],
  ['champion','🏆','بطل التحدي','اكسب سباق المليون ضد المنافسين',()=>!!(S.achv&&S.achv.champion)],
  ['shark','🦈','قرش السوق','استحوذ على شركة منافسك',()=>!!(S.achv&&S.achv.shark)],
+ ['hr','🧑‍💼','قائد فريق','رضا الفريق ٩٠٪ أو أكثر',()=>!!S.company&&S.company.morale>=90],
+ ['staff','🎓','طاقم نخبة','طاقم الإدارة بمستوى ٩',()=>!!S.company&&staffLevel(S.company)>=9],
 ];
 function checkAchv(){
   ACHV.forEach(a=>{if(!S.achv[a[0]]&&a[4]()){S.achv[a[0]]=1;toast('🏅 إنجاز جديد: '+a[2]);}});
@@ -1776,7 +1842,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();renderHR();}
 
 /* تبويبات */
 function showPage(p){
@@ -3128,6 +3194,49 @@ if(location.hash==='#test'){
     endOfDay();
     ok('سحب المستثمرين بعد ٣ خسارات',S.hf.capital<capH0*0.75&&S.hf.streak===0);
     S.hf={on:false,capital:0,hwm:0,fees:0,streak:0};S.nwHist=nwH0;S.day=dayH0;
+    // إدارة الموظفين: رضا الفريق وطاقم الإدارة
+    if(S.company){
+      const cc=S.company;
+      cc.workers=60;cc.cash=400000;cc.morale=60;cc.wage=1;cc.staff={eng:0,sales:0,mkt:0};cc.quality=30;
+      renderHR();
+      ok('بطاقة فريق العمل تعرض',$('hrBody').innerHTML.includes('رضا الفريق')&&!!$('sWage'));
+      const cashS=cc.cash;hireStaff('eng');
+      ok('تعيين مهندس جودة',cc.staff.eng===1&&cc.cash===cashS-12000);
+      hireStaff('eng');
+      ok('ترقية المهندس للمستوى ٢',cc.staff.eng===2&&cc.cash===cashS-36000);
+      const cashL=cc.cash;hireStaff('sales');hireStaff('mkt');
+      ok('تعيين مبيعات وتسويق',cc.staff.sales===1&&cc.staff.mkt===1&&cc.cash<cashL);
+      ok('رواتب الإدارة محسوبة',staffCost(cc)===180*2+220+150);
+      cc.morale=50;cc.wage=1.5;cc.workers=60;
+      for(let i=0;i<25;i++){cc.workers=60;runCompany();}
+      ok('رفع الرواتب يرفع الرضا',cc.morale>70);
+      cc.morale=55;cc.wage=0.6;cc.workers=200;cc.staff={eng:0,sales:0,mkt:0};cc.cash=400000;
+      for(let i=0;i<40;i++)runCompany();
+      ok('الرواتب المنخفضة تخفض الرضا',cc.morale<35);
+      ok('استقالات عند الرضا المنخفض',cc.workers<200);
+      const R0=RNG;RNG=()=>0.5;
+      cc.workers=60;cc.staff={eng:0,sales:0,mkt:0};cc.wage=1;cc.price=40;cc.quality=40;cc.rd=0;cc.marketing=0;cc.morale=60;
+      runCompany();const soldBase=cc.todaySold;
+      cc.morale=100;runCompany();const soldHi=cc.todaySold;
+      cc.morale=0;runCompany();const soldLo=cc.todaySold;
+      cc.morale=60;cc.staff={eng:0,sales:3,mkt:0};runCompany();const soldMgr=cc.todaySold;
+      cc.staff={eng:0,sales:0,mkt:0};cc.quality=40;const qA=cc.quality;runCompany();const qNoEng=cc.quality-qA;
+      cc.quality=40;cc.staff={eng:3,sales:0,mkt:0};const qB=cc.quality;runCompany();const qEng=cc.quality-qB;
+      RNG=R0;
+      ok('الرضا العالي يرفع المبيعات',soldHi>soldLo&&soldBase>soldLo);
+      ok('مدير المبيعات يرفع الطلب',soldMgr>soldLo);
+      ok('مهندس الجودة يرفع الجودة أسرع',qEng>qNoEng);
+      const keepC=S.company;
+      S.company={name:'قديمة',sector:'تقنية',cash:1000,price:40,rd:0,marketing:0,workers:10,quality:10,track:[]};
+      migrate();
+      ok('ترحيل الحفظ القديم يضيف حقول الفريق',S.company.morale===60&&S.company.wage===1&&S.company.staff&&S.company.staff.eng===0);
+      S.company=keepC;
+      const ph=new Set();for(let i=0;i<60;i++){S.day++;endOfDay();ph.add(S.macro.phase);}
+      ok('دورة الاقتصاد تتنقل بين المراحل',ph.size>=2);
+      ok('رضا الفريق محصور بين ٠ و١٠٠',S.company.morale>=0&&S.company.morale<=100);
+      renderAll();
+      ok('بطاقة الفريق ترسم في الواجهة',$('hrBody').innerHTML.length>50);
+    }
     renderAll();
     save();ok('حفظ',!!localStorage.getItem('econLive1'));
     renderAll();refreshNewsUI();ok('رسم الواجهة',true);
@@ -3137,4 +3246,4 @@ if(location.hash==='#test'){
 }
 </script>
 </body>
-  </html>
+</html>
