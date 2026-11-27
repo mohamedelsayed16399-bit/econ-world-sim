@@ -404,6 +404,11 @@ tr.row:hover,tr.row.sel{background:#182442}
       </div>
       <div id="perfCmp" style="margin-top:10px;font-size:13px"></div>
     </div>
+    <div class="card" id="acqCard">
+      <h3>🏢 فرص استحواذ</h3>
+      <p style="font-size:12.5px;color:var(--dim);margin:4px 0 8px">شركات صغيرة معروضة للبيع. الصفقة الناجحة توسّع طاقتك وتضيف عمالًا وجودة؛ والفاشلة تخسّرك رسومها (٣٪).</p>
+      <div id="acqBody"></div>
+    </div>
     <div class="card" id="confCard">
       <h3>🎤 مؤتمر صحفي (للشركات المدرجة)</h3>
       <div id="confBody"></div>
@@ -584,7 +589,7 @@ function freshState(){
   CITIES.forEach(ct=>{st.assets['ب:'+ct.n]={kind:'cidx',name:'بورصة '+ct.n,sector:ct.n,price:100,base:100,vol:0.022,sent:0,trend:0,hist:[100],held:0,avg:0,short:0,shortAvg:0};});
   st.npcs=NPC_NAMES.map(n=>({name:n,worth:rnd(60000,900000),prev:0}));
   SECTORS.forEach(s=>st.sectorHist[s]=[100]);
-  st.orders=[];st.alerts=[];st.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};st.snd=true;st.macro={phase:0,days:8};
+  st.orders=[];st.alerts=[];st.acq={list:[],next:5};st.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};st.snd=true;st.macro={phase:0,days:8};
   st.props={};st.propPrice={'شقة وسط البلد':60000,'محل تجاري':120000,'فيلا':200000,'برج مكاتب':500000};
   st.propBase=Object.assign({},st.propPrice);st.bonds=[];st.goal=null;st.rival=null;st.tut=0;st.rentTotal=0;
   st.theme='dark';st.bubbles={};st.offers=0;st.quests=[];st.questDay=0;st.bankruptcies=0;
@@ -605,6 +610,7 @@ function migrate(){
   if(S.coveredProfit==null)S.coveredProfit=0;if(S.divCount==null)S.divCount=0;
   if(S.tips==null)S.tips=0;if(S.tipUsed==null)S.tipUsed=0;
   if(!S.orders)S.orders=[];if(!S.alerts)S.alerts=[];
+  if(!S.acq)S.acq={list:[],next:5};
   if(!S.macro)S.macro={phase:0,days:8};
   if(S.company){
     if(S.company.morale==null)S.company.morale=60;
@@ -729,6 +735,7 @@ function endOfDay(){
       toast('🌡️ مرحلة جديدة: '+m.ic+' '+m.n);
     }
   }
+  if(S.acq&&S.day>=S.acq.next){S.acq.list=genAcq();S.acq.next=S.day+12;}
   // فوائد
   S.dep*=1+S.rate/365;
   S.loan*=1+0.09/365;
@@ -1806,6 +1813,47 @@ function renderCompany(){
   $('vWk').textContent=c.workers;
   $('sPrice').value=c.price;$('sRd').value=c.rd;$('sMk').value=c.marketing;$('sWk').value=c.workers;
 }
+const ACQ_NAMES=['مصنع الواحة','شركة النور','مجموعة الدلتا','تقنيات المتوسط','مزارع النيل','شبكة الشروق','معامل الشفاء','أسواق الحرية'];
+function genAcq(){
+  const list=[];
+  for(let i=0;i<3;i++){
+    const idx=Math.floor(RNG()*COMPS.length);const c=COMPS[idx];
+    const price=Math.round(c[2]*400*(1+RNG()*0.8)/1000)*1000;
+    list.push({n:ACQ_NAMES[(idx*3+i)%ACQ_NAMES.length],sec:c[1],price:price,offer:Math.round(price*1.12),done:false});
+  }
+  return list;
+}
+function acqChance(){return 0.55+Math.min(0.3,companyValue()/1200000*0.3);}
+function buyAcq(i){
+  const c=S.company;if(!c)return toast('أسّس شركة أولًا');
+  if(!S.acq)S.acq={list:[],next:5};
+  const t=S.acq.list[i];if(!t||t.done)return;
+  if(c.cash<t.offer)return toast('❌ خزينة الشركة لا تكفي ('+fmtD(t.offer)+')');
+  if(RNG()<acqChance()){
+    c.cash-=t.offer;c.up=c.up||{line:0,auto:0,brand:0};c.up.line+=0.25;
+    c.workers+=Math.round(8+t.price/20000);
+    c.quality=Math.min(100,c.quality+4);
+    S.achv.acq=1;
+    pushNews(S,'🏢 "'+c.name+'" استحوذت على "'+t.n+'" — توسّع في قطاع '+t.sec,0.015,true,true);
+    toast('🏢 تم الاستحواذ على '+t.n+'!');
+  }else{
+    const fee=Math.round(t.offer*0.03);c.cash-=fee;
+    pushNews(S,'❌ فشلت صفقة استحواذ "'+c.name+'" على "'+t.n+'" — رسوم '+fmtD(fee),-0.005,false,true);
+    toast('❌ فشلت الصفقة — رسوم '+fmtD(fee));
+  }
+  t.done=true;renderAcq();renderCompany();renderPerf();
+}
+function renderAcq(){
+  const b=$('acqBody');if(!b)return;
+  if(!S.acq)S.acq={list:[],next:5};
+  if(!S.acq.list.length)S.acq.list=genAcq();
+  const c=S.company;const ch=Math.round(acqChance()*100);
+  b.innerHTML=S.acq.list.map((t,i)=>{
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap">'+
+      '<span>🏢 <b>'+t.n+'</b> <span style="color:var(--dim);font-size:12px">· '+t.sec+'</span><br><span style="color:var(--dim);font-size:12px">سعر الصفقة '+fmtD(t.offer)+' · فرصة نجاح '+ch+'%</span></span>'+
+      (t.done?'<b style="color:var(--dim)">انتهت</b>':'<button class="btnGhost" onclick="buyAcq('+i+')" '+(!c||c.cash<t.offer?'disabled':'')+'>استحوذ</button>')+'</div>';
+  }).join('')+'<div style="color:var(--dim);font-size:12px;margin-top:8px">عرض جديد بعد '+Math.max(0,S.acq.next-S.day)+' يوم</div>';
+}
 function renderHR(){
   const c=S.company;const b=$('hrBody');if(!c||!b)return;
   if(c.morale==null)c.morale=60;if(c.wage==null)c.wage=1;if(!c.staff)c.staff={eng:0,sales:0,mkt:0};
@@ -1900,6 +1948,7 @@ const ACHV=[
  ['hr','🧑‍💼','قائد فريق','رضا الفريق ٩٠٪ أو أكثر',()=>!!S.company&&S.company.morale>=90],
  ['staff','🎓','طاقم نخبة','طاقم الإدارة بمستوى ٩',()=>!!S.company&&staffLevel(S.company)>=9],
  ['strike','✊','مفاوض','أنهيت إضرابًا عماليًا',()=>!!(S.achv&&S.achv.strike)],
+ ['acq','🏢','مستحوذ','استحوذت على شركة صغيرة',()=>!!(S.achv&&S.achv.acq)],
 ];
 function checkAchv(){
   ACHV.forEach(a=>{if(!S.achv[a[0]]&&a[4]()){S.achv[a[0]]=1;toast('🏅 إنجاز جديد: '+a[2]);}});
@@ -1927,7 +1976,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();renderHR();renderPerf();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();renderHR();renderPerf();renderAcq();}
 
 /* تبويبات */
 function showPage(p){
@@ -3346,6 +3395,23 @@ if(location.hash==='#test'){
       const keepP=S.company;
       S.company={name:'قديمة٢',sector:'تقنية',cash:1000,price:40,rd:0,marketing:0,workers:10,quality:10,track:[]};
       migrate();ok('ترحيل يضيف سجل الأداء',Array.isArray(S.company.hist));S.company=keepP;
+      // استحواذ شركات صغيرة
+      cc.cash=500000;cc.up=cc.up||{line:0,auto:0,brand:0};cc.workers=60;cc.quality=40;
+      S.acq={list:genAcq(),next:S.day+12};
+      ok('قائمة استحواذ تتولد',S.acq.list.length===3&&S.acq.list.every(t=>t.offer>0));
+      renderAcq();ok('بطاقة الاستحواذ تعرض',$('acqBody').innerHTML.includes('استحوذ'));
+      cc.cash=100;buyAcq(0);
+      ok('استحواذ بدون كاش مرفوض',S.acq.list[0].done===false&&cc.cash===100);
+      const R3=RNG;RNG=()=>0.01;cc.cash=500000;const line0=cc.up.line,w0=cc.workers;
+      buyAcq(0);RNG=R3;
+      ok('استحواذ ناجح يوسّع الشركة',S.acq.list[0].done&&cc.up.line>line0&&cc.workers>w0&&cc.cash<500000);
+      RNG=()=>0.99;const cashF=cc.cash;const feeExp=Math.round(S.acq.list[1].offer*0.03);
+      buyAcq(1);RNG=R3;
+      ok('صفقة فاشلة تخصم رسوم ٣٪',S.acq.list[1].done&&Math.abs((cashF-cc.cash)-feeExp)<=1);
+      const cQ=cc.cash;buyAcq(0);
+      ok('لا إعادة شراء لصفقة منتهية',cc.cash===cQ);
+      S.day=S.acq.next;const nx0=S.acq.next;endOfDay();
+      ok('عرض استحواذ جديد يتولد',S.acq.next===nx0+12&&S.acq.list.every(t=>!t.done));
       const keepC=S.company;
       S.company={name:'قديمة',sector:'تقنية',cash:1000,price:40,rd:0,marketing:0,workers:10,quality:10,track:[]};
       migrate();
