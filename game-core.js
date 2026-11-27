@@ -107,6 +107,8 @@ function freshState(){
   st.lotto={pool:20000,tickets:0};st.moodHist=[0.15];st.sortKey=null;
   st.notifs=[];st.splits=0;
   st.prestige=0;st.gEvent=null;st.cityStatus={};st.challenge=null;st.options=[];st.autopilot=false;st.subsidiary=null;st.weekly=null;st.hof=[];st.mining={rigs:0,upg:0,total:0};st.auction=null;st.empire=[];st.ins={until:0,paid:0};st.followers=0;st.quiz={day:0,streak:0,won:0};st.duel=null;st.duelWins=0;st.fundP=[100,100,100];st.fundHist=[[100],[100],[100]];st.fundH=[0,0,0];st.fundAvg=[0,0,0];st.confDay=-20;st.vc=[];st.vcDeal=null;st.vcNext=3;st.vcWins=0;st.vcLost=0;st.marginPos=null;st.recPeak=100000;st.recBestDay=0;st.hf={on:false,capital:0,hwm:0,fees:0,streak:0};
+  st.war={active:null,next:6,shield:0,shieldDays:0,wins:0,losses:0,log:[],blocked:0};
+  st.allies={list:[],pact:null,heat:0,fines:0,log:[]};
   pushNews(st,'افتتاح السوق العالمية للمحاكاة — حظ موفق أيها المستثمر!',0,false);
   return st;
 }
@@ -124,6 +126,8 @@ function migrate(){
   if(!S.acq)S.acq={list:[],next:5};
   if(S.corp===undefined)S.corp=null;
   if(!S.contests)S.contests=[];
+  if(S.pubAuc===undefined)S.pubAuc=null;
+  if(S.nextAuc==null)S.nextAuc=0;
   if(!S.macro)S.macro={phase:0,days:8};
   if(S.company){
     if(S.company.morale==null)S.company.morale=60;
@@ -139,6 +143,10 @@ function migrate(){
     if(!S.company.ipo)S.company.ipo={listed:false};
     if(!S.company.sup)S.company.sup={active:null,offers:[],history:[],deals:0};
     if(!S.company.team)S.company.team={xp:{eng:0,sales:0,mkt:0},lastBonus:-99,bonuses:0,trains:0};
+    if(S.company.aucIncome==null)S.company.aucIncome=0;
+    if(S.company.aucValue==null)S.company.aucValue=0;
+    if(!S.company.subs)S.company.subs={active:false,plan:null,members:0,price:0,mrr:0,churn:0,total:0,launchDay:0};
+    if(!S.company.care)S.company.care={agents:0,csat:70,tickets:0,resolved:0,backlog:0,trained:0};
   }
   if(!S.stats)S.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};
   if(S.stats.worstTrade==null)S.stats.worstTrade=0;
@@ -171,6 +179,14 @@ function migrate(){
   if(!S.vc)S.vc=[];if(S.vcDeal===undefined)S.vcDeal=null;if(S.vcNext==null)S.vcNext=3;if(S.vcWins==null)S.vcWins=0;if(S.vcLost==null)S.vcLost=0;
   if(!S.hf)S.hf={on:false,capital:0,hwm:0,fees:0,streak:0};
   if(S.marginPos===undefined)S.marginPos=null;if(S.recPeak==null)S.recPeak=100000;if(S.recBestDay==null)S.recBestDay=0;
+  if(!S.war)S.war={active:null,next:(S.day||1)+4,shield:0,shieldDays:0,wins:0,losses:0,log:[],blocked:0};
+  if(S.war.active===undefined)S.war.active=null;if(S.war.next==null)S.war.next=(S.day||1)+4;
+  if(S.war.shield==null)S.war.shield=0;if(S.war.shieldDays==null)S.war.shieldDays=0;
+  if(S.war.wins==null)S.war.wins=0;if(S.war.losses==null)S.war.losses=0;if(!S.war.log)S.war.log=[];
+  if(S.war.blocked==null)S.war.blocked=0;
+  if(!S.allies)S.allies={list:[],pact:null,heat:0,fines:0,log:[]};
+  if(!S.allies.list)S.allies.list=[];if(S.allies.pact===undefined)S.allies.pact=null;
+  if(S.allies.heat==null)S.allies.heat=0;if(S.allies.fines==null)S.allies.fines=0;if(!S.allies.log)S.allies.log=[];
 }
 function pushNews(st,text,impact,hot,good){
   st.news.unshift({d:st.day,h:st.hour,text,hot:!!hot,good:!!good});
@@ -182,7 +198,8 @@ function load(){try{const s=localStorage.getItem('econLive1');if(s){S=JSON.parse
 function companyValue(){
   const c=S.company;if(!c)return 0;
   const ann=Math.max(c.lastYearProfit,0);
-  return Math.max(0,c.cash)+ann*4+c.quality*800;
+  const subVal=(c.subs&&c.subs.active)?Math.round((c.subs.mrr||0)*6):0;
+  return Math.max(0,c.cash)+ann*4+c.quality*800+(c.aucValue||0)+subVal;
 }
 function propsValue(){let v=0;for(const n in S.props){v+=S.props[n].qty*(S.propPrice[n]||S.props[n].avg);}return v;}
 function netWorth(){
@@ -257,6 +274,9 @@ function endOfDay(){
   }
   if(S.acq&&S.day>=S.acq.next){S.acq.list=genAcq();S.acq.next=S.day+12;}
   updateCorpStock();
+  pubAucTick();
+  warTick();
+  allyTick();
   if(S.corp&&S.day%7===0){
     S.corp.forEach(c=>{
       c.value=Math.max(50000,Math.round(c.value*(1+rnd(-0.03,0.05))));
@@ -688,14 +708,15 @@ function runCompany(){
   const repF=1+(c.rep-50)/500;
   const prod=0.72+c.morale/100*0.56;
   const sectorMood=avgSectorSent(c.sector);
-  const fairPrice=40*(1+sectorMood)+c.quality*1.5;
+  const cartelF=(S.allies&&S.allies.pact)?1.12:1;
+  const fairPrice=(40*(1+sectorMood)+c.quality*1.5)*cartelF;
   const priceFactor=Math.max(0.05,1-(c.price-fairPrice)/fairPrice*0.8);
   const marketing=Math.log(1+c.marketing/100)*(1+0.4*c.up.brand+teamEff('mkt',c)*0.12);
   const capacity=1+0.5*c.up.line;
   
   const rivalF=S.rival?Math.max(0.5,1-S.rival.strength*0.16):1;
   const salesBoost=1+teamEff('sales',c)*0.08;
-  const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rivalF*salesBoost*strikeF*campF*crisisF*repF*(1+c.brand/400)*prod*rnd(0.85,1.15));
+  const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rivalF*salesBoost*strikeF*campF*crisisF*repF*(1+c.brand/400)*prod*warDemandF()*allyDemandF()*careDemandF(c)*rnd(0.85,1.15));
   if(!c.inv)c.inv=invDef();
   supTick();
   teamTick(c);
@@ -730,10 +751,12 @@ function runCompany(){
     c.brand=Math.max(0,(c.brand||10)-0.4);
     if(c.inv.stockDays===3)pushNews(S,'📦 نفاد مخزون في "'+c.name+'" — عملاء خرجوا بدون شراء',-0.01,true,true);
   }else c.inv.stockDays=0;
+  careTick(c,sold);
   const revenue=sold*c.price;
   const wageBill=c.workers*22*c.wage;
-  const costs=wageBill+staffCost(c)+c.rd+c.marketing+sold*c.price*0.35;
-  const profit=revenue-costs;
+  const costs=wageBill+staffCost(c)+c.rd+c.marketing+careCost(c)+sold*c.price*0.35*warCostF()*allyCostF();
+  const subRev=subTick(c);
+  const profit=revenue-costs+(c.aucIncome||0)+subRev;
   const pFinal=profit>0?profit*pmult():profit;
   
   let branchProfit=0;
@@ -748,8 +771,8 @@ function runCompany(){
   }
   c.branchProfit=branchProfit;
   c.cash+=pFinal;
-  c.todayRev=revenue;c.todayProfit=pFinal;c.todaySold=Math.round(sold);
-  c.quality=Math.min(100,c.quality+c.rd/4000+c.up.auto*0.05+teamEff('eng',c)*0.012);
+  c.todayRev=revenue;c.todayProfit=pFinal;c.todaySold=Math.round(sold);c.todaySub=subRev;
+  c.quality=Math.min(100,c.quality+c.rd/4000+c.up.auto*0.05+teamEff('eng',c)*0.012+allyQualityBonus());
   c.quality=Math.max(0,c.quality-0.05);
   c.track.push(profit);
   if(!c.hist)c.hist=[];
@@ -1388,7 +1411,9 @@ function renderCompany(){
     kpi('خزينة الشركة',fmtD(c.cash))+kpi('قيمة الشركة',fmtD(companyValue()))+
     kpi('مبيعات اليوم',c.todaySold||0)+kpi('ربح اليوم',fmtD(c.todayProfit||0))+
     kpi('الجودة',c.quality.toFixed(0)+'/100')+kpi('العمال',c.workers)+
-    kpi('رضا الفريق',Math.round(c.morale)+'%')+kpi('طاقم الإدارة',staffLevel(c)+'/15');
+    kpi('رضا الفريق',Math.round(c.morale)+'%')+kpi('طاقم الإدارة',staffLevel(c)+'/15')+
+    kpi('مشتركون',(c.subs&&c.subs.active)?Math.round(c.subs.members):'—')+kpi('إيراد شهري متكرر',(c.subs&&c.subs.active)?fmtD(c.subs.mrr||0):'—')+
+    kpi('رضا العملاء',Math.round((c.care&&c.care.csat)||70)+'%');
   $('vPrice').textContent=c.price+' د.';
   $('vRd').textContent=fmtD(c.rd);
   $('vMk').textContent=fmtD(c.marketing);
@@ -1476,4 +1501,175 @@ function healthScore(){
   ];
   const score=Math.round(parts.reduce((s,p)=>s+p.v*p.w,0)*100);
   return {score:score,parts:parts};
-                                   }
+}
+function renderHealth(){
+  const b=$('healthBody');if(!b)return;
+  const c=S.company;
+  if(!c){b.innerHTML='';return;}
+  const hs=healthScore();if(!hs)return;
+  const sc=hs.score;
+  const col=sc>=70?'var(--up)':sc>=45?'#f59e0b':'var(--dn)';
+  const grade=sc>=85?'A':sc>=70?'B':sc>=45?'C':'D';
+  let h='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0"><span style="font-size:14px">❤️ صحة الشركة</span><b style="font-size:22px;color:'+col+'">'+sc+'/100 · '+grade+'</b></div>';
+  h+='<div style="height:10px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:2px 0 10px"><div style="height:100%;width:'+sc+'%;background:'+col+'"></div></div>';
+  hs.parts.forEach(p=>{
+    const v=Math.round(p.v*100);
+    const pc=v>=60?'var(--up)':v>=40?'#f59e0b':'var(--dn)';
+    h+='<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:13px"><span style="color:var(--dim)">'+p.k+'</span><b style="color:'+pc+'">'+v+'%</b></div>';
+  });
+  const warns=hs.parts.filter(p=>p.v<0.45);
+  if(warns.length){
+    h+='<div style="margin-top:8px;background:rgba(239,68,68,.1);border:1px solid var(--dn);border-radius:10px;padding:8px;font-size:12.5px">⚠️ تحذيرات: '+warns.map(w=>w.k+' — '+w.tip).join(' · ')+'</div>';
+  }else{
+    h+='<div style="margin-top:8px;color:var(--up);font-size:12.5px">✔ كل المؤشرات في نطاق آمن</div>';
+  }
+  b.innerHTML=h;
+}
+function invDef(){return {units:2000,cap:6000,order:null,auto:false,missed:0,stockDays:0};}
+function orderStock(units){
+  const c=S.company;if(!c)return toast('أسّس شركة أولًا');
+  if(!c.inv)c.inv=invDef();
+  if(c.inv.order)return toast('في شحنة في الطريق بالفعل');
+  const cost=Math.round(units*supCost());
+  if(c.cash<cost)return toast('❌ الخزينة لا تكفي ('+fmtD(cost)+')');
+  c.cash-=cost;c.inv.order={units:units,left:3};
+  toast('📦 طلب شحنة '+units+' وحدة — توصل بعد 3 أيام');
+  renderInv();renderCompany();
+}
+function toggleAutoOrder(){
+  const c=S.company;if(!c)return;if(!c.inv)c.inv=invDef();
+  c.inv.auto=!c.inv.auto;
+  toast(c.inv.auto?'🔁 إعادة الطلب التلقائي مفعّلة':'إعادة الطلب التلقائي متوقفة');
+  renderInv();
+}
+function upgradeWarehouse(){
+  const c=S.company;if(!c)return;if(!c.inv)c.inv=invDef();
+  const cost=25000;
+  if(c.cash<cost)return toast('❌ الخزينة لا تكفي ('+fmtD(cost)+')');
+  c.cash-=cost;c.inv.cap+=4000;
+  toast('🏭 توسيع المخزن (+4,000 وحدة)');
+  renderInv();renderCompany();
+}
+function renderInv(){
+  const b=$('invBody');if(!b)return;
+  const c=S.company;
+  if(!c){b.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا.</div>';return;}
+  if(!c.inv)c.inv=invDef();
+  const u=Math.round(c.inv.units),cap=c.inv.cap;
+  const pct=Math.max(0,Math.min(100,Math.round(u/cap*100)));
+  const col=pct>40?'var(--up)':pct>15?'#f59e0b':'var(--dn)';
+  const prod=Math.round(c.workers*8*(1+0.5*((c.up&&c.up.line)||0))*(0.72+(c.morale||60)/100*0.56));
+  let h='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0"><span>المخزون</span><b style="color:'+col+'">'+u+' / '+cap+' وحدة</b></div>';
+  h+='<div style="height:9px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:4px 0 10px"><div style="height:100%;width:'+pct+'%;background:'+col+'"></div></div>';
+  h+='<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line);font-size:13.5px"><span>إنتاج اليوم</span><b>'+prod+' وحدة</b></div>';
+  h+='<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line);font-size:13.5px"><span>مبيعات فائتة اليوم (نفاد)</span><b style="color:'+(c.inv.missed>0?'var(--dn)':'var(--dim)')+'">'+(c.inv.missed||0)+' وحدة</b></div>';
+  if(c.inv.order){
+    h+='<div style="background:rgba(59,130,246,.12);border:1px solid var(--accent);border-radius:12px;padding:9px;margin:8px 0">🚚 شحنة '+c.inv.order.units+' وحدة في الطريق — توصل بعد '+c.inv.order.left+' يوم</div>';
+  }
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">';
+  [500,1500,5000].forEach(n=>{
+    h+='<button class="btnGhost" onclick="orderStock('+n+')" '+(c.inv.order||c.cash<n*supCost()?'disabled':'')+'>اطلب '+n+' ('+fmtD(n*supCost())+')</button>';
+  });
+  h+='</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">'+
+    '<button class="btnGhost" onclick="toggleAutoOrder()">'+(c.inv.auto?'🔁 إعادة طلب تلقائي: مفعّلة':'🔁 إعادة طلب تلقائي: متوقفة')+'</button>'+
+    '<button class="btnGhost" onclick="upgradeWarehouse()" '+(c.cash<25000?'disabled':'')+'>🏭 توسيع المخزن (25.0 ألف د.)</button></div>';
+  b.innerHTML=h;
+}
+
+const SUP_NAMES=['مصنع النيل','الشرق للتوريد','مجموعة الدلتا','مؤسسة الحرية','توريدات الإسكندرية','مصنع الأمل'];
+function supDef(){return {active:null,offers:[],history:[],deals:0};}
+function genSupOffers(){
+  const c=S.company;if(!c)return [];
+  if(!c.sup)c.sup=supDef();
+  const pick=[];const used={};
+  for(let i=0;i<3;i++){
+    let n,guard=0;
+    do{n=SUP_NAMES[Math.floor(RNG()*SUP_NAMES.length)];guard++;}while(used[n]&&guard<25);
+    used[n]=1;
+    const tier=Math.floor(RNG()*3);
+    const unitCost=+(rnd(2.1,2.7)+tier*0.55).toFixed(2);
+    const reliability=Math.min(0.99,+(0.72+tier*0.09+rnd(-0.03,0.05)).toFixed(2));
+    const quality=Math.round(rnd(0,3)+tier*3);
+    const volume=Math.round(rnd(600,1400)/100)*100;
+    pick.push({name:n,unitCost:unitCost,reliability:reliability,quality:quality,volume:volume,term:30,tier:tier,neg:0,declined:false,fee:Math.round(unitCost*volume*2)});
+  }
+  c.sup.offers=pick;
+  return pick;
+}
+function supOffers(){
+  const c=S.company;if(!c)return [];
+  if(!c.sup)c.sup=supDef();
+  if(!c.sup.offers||!c.sup.offers.length)genSupOffers();
+  return c.sup.offers;
+}
+function supCost(){const c=S.company;return (c&&c.sup&&c.sup.active)?c.sup.active.unitCost:3;}
+function negotiateSup(i,style){
+  const c=S.company;if(!c)return false;
+  const o=supOffers()[i];if(!o||o.declined||o.neg>=2)return false;
+  const rep=(c.rep==null?50:c.rep)/100,br=(c.brand==null?10:c.brand)/100;
+  if(style==='hard'){
+    if(RNG()<0.35+rep*0.4+br*0.2){
+      o.unitCost=+(o.unitCost*0.88).toFixed(2);
+      o.reliability=Math.max(0.6,+(o.reliability-0.05).toFixed(2));
+      o.quality=Math.max(0,o.quality-2);o.neg++;
+      toast('💪 '+o.name+' وافق على خصم ١٢٪');
+    }else{
+      o.declined=true;o.neg=2;
+      toast('🚫 '+o.name+' رفض التفاوض — العرض اتقفل');
+    }
+  }else if(style==='fair'){
+    o.unitCost=+(o.unitCost*0.96).toFixed(2);o.neg++;
+    toast('🤝 '+o.name+' وافق على خصم ٤٪');
+  }else{
+    o.unitCost=+(o.unitCost*1.06).toFixed(2);
+    o.reliability=Math.min(0.99,+(o.reliability+0.05).toFixed(2));
+    o.quality=o.quality+4;o.neg++;
+    toast('⭐ اتفاقية ممتازة مع '+o.name+' — التزام أعلى وجودة أحسن');
+  }
+  o.fee=Math.round(o.unitCost*o.volume*2);
+  c.sup.deals=(c.sup.deals||0)+1;
+  save();renderSup();renderCompany();
+  return true;
+}
+function negHard(i){return negotiateSup(i,'hard');}
+function negFair(i){return negotiateSup(i,'fair');}
+function negPrem(i){return negotiateSup(i,'prem');}
+function signSup(i){
+  const c=S.company;if(!c)return false;
+  if(!c.sup)c.sup=supDef();
+  if(c.sup.active)return false;
+  const o=supOffers()[i];if(!o||o.declined)return false;
+  if(c.cash<o.fee)return false;
+  c.cash-=o.fee;
+  c.sup.active={name:o.name,unitCost:o.unitCost,reliability:o.reliability,quality:o.quality,volume:o.volume,term:o.term,endDay:S.day+o.term,fee:o.fee};
+  c.sup.offers=[];
+  c.sup.history.push({d:S.day,n:o.name,cost:o.unitCost});
+  if(c.sup.history.length>6)c.sup.history.shift();
+  toast('🤝 عقد توريد مع '+o.name+' — '+o.term+' يوم بسعر '+o.unitCost.toFixed(2)+'/وحدة');
+  pushNews(S,'🤝 "'+c.name+'" توقّع عقد توريد مع "'+o.name+'" لمدة '+o.term+' يوم',0.01,true,true);
+  save();renderSup();renderInv();renderCompany();
+  return true;
+}
+function cancelSup(){
+  const c=S.company;if(!c||!c.sup||!c.sup.active)return false;
+  const a=c.sup.active;
+  const pen=Math.round(a.unitCost*a.volume*2);
+  if(c.cash<pen)return false;
+  c.cash-=pen;
+  c.rep=Math.max(0,(c.rep==null?50:c.rep)-3);
+  c.sup.active=null;c.sup.offers=[];
+  toast('📄 فسخت العقد — غرامة '+fmtD(pen)+' وسمعة −3');
+  pushNews(S,'📄 "'+c.name+'" فسخت عقد التوريد مع "'+a.name+'"',-0.01,false,true);
+  save();renderSup();renderInv();renderCompany();
+  return true;
+}
+function supTick(){
+  const c=S.company;if(!c||!c.sup||!c.sup.active)return;
+  const a=c.sup.active;
+  if(a.quality>0)c.quality=Math.min(100,(c.quality||0)+a.quality*0.02);
+  if(S.day>=a.endDay){
+    c.sup.active=null;c.sup.offers=[];
+    toast('📄 انتهى عقد التوريد مع '+a.name+' — اختار مورد جديد');
+    pushNews(S,'📄 انتهى عقد توريد "'+c.name+'" مع "'+a.name+'"',0,false,true);
+  }
+                                                             }
