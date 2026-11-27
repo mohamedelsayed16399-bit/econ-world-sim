@@ -417,6 +417,10 @@ tr.row:hover,tr.row.sel{background:#182442}
       <h3>🛡️ السمعة والأزمات</h3>
       <div id="repBody"></div>
     </div>
+    <div class="card" id="invCard">
+      <h3>📦 المخزون وسلسلة التوريد</h3>
+      <div id="invBody"></div>
+    </div>
     <div class="card" id="confCard">
       <h3>🎤 مؤتمر صحفي (للشركات المدرجة)</h3>
       <div id="confBody"></div>
@@ -630,6 +634,7 @@ function migrate(){
     if(S.company.campaign===undefined)S.company.campaign=null;
     if(S.company.rep==null)S.company.rep=50;
     if(S.company.crisis===undefined)S.company.crisis=null;
+    if(!S.company.inv)S.company.inv=invDef();
   }
   if(!S.stats)S.stats={trades:0,divTotal:0,tipsBought:0,bestTrade:0};
   if(S.stats.worstTrade==null)S.stats.worstTrade=0;
@@ -1179,7 +1184,31 @@ function runCompany(){
   const rivalF=S.rival?Math.max(0.5,1-S.rival.strength*0.16):1;
   const salesBoost=1+(c.staff.sales||0)*0.08;
   const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rivalF*salesBoost*strikeF*campF*crisisF*repF*(1+c.brand/400)*prod*rnd(0.85,1.15));
-  const sold=Math.min(demand,c.workers*10*capacity*prod);
+  if(!c.inv)c.inv=invDef();
+  const production=c.workers*8*capacity*prod;
+  c.inv.units=Math.min(c.inv.cap,c.inv.units+production);
+  if(c.inv.order){
+    c.inv.order.left--;
+    if(c.inv.order.left<=0){
+      const add=Math.min(c.inv.order.units,Math.max(0,c.inv.cap-c.inv.units));
+      c.inv.units+=add;c.inv.order=null;
+      toast('🚚 وصلت شحنة الموردين ('+Math.round(add)+' وحدة)');
+    }
+  }
+  if(c.inv.auto&&!c.inv.order&&c.inv.units<c.inv.cap*0.25){
+    const cost=1000*3;
+    if(c.cash>=cost){c.cash-=cost;c.inv.order={units:1000,left:3};toast('🔁 طلب تلقائي: شحنة 1000 وحدة');}
+  }
+  const sold=Math.min(demand,c.inv.units);
+  c.inv.units-=sold;
+  const lost=Math.max(0,demand-sold);
+  c.inv.missed=Math.round(lost);
+  if(lost>1){
+    c.inv.stockDays=(c.inv.stockDays||0)+1;
+    c.rep=Math.max(0,(c.rep||50)-0.4);
+    c.brand=Math.max(0,(c.brand||10)-0.15);
+    if(c.inv.stockDays===3)pushNews(S,'📦 نفاد مخزون في "'+c.name+'" — عملاء خرجوا بدون شراء',-0.01,true,true);
+  }else c.inv.stockDays=0;
   const revenue=sold*c.price;
   const wageBill=c.workers*22*c.wage;
   const costs=wageBill+staffCost(c)+c.rd+c.marketing+sold*c.price*0.35;
@@ -1848,6 +1877,56 @@ function renderCompany(){
   $('vWk').textContent=c.workers;
   $('sPrice').value=c.price;$('sRd').value=c.rd;$('sMk').value=c.marketing;$('sWk').value=c.workers;
 }
+function invDef(){return {units:2000,cap:6000,order:null,auto:false,missed:0,stockDays:0};}
+function orderStock(units){
+  const c=S.company;if(!c)return toast('أسّس شركة أولًا');
+  if(!c.inv)c.inv=invDef();
+  if(c.inv.order)return toast('في شحنة في الطريق بالفعل');
+  const cost=Math.round(units*3);
+  if(c.cash<cost)return toast('❌ الخزينة لا تكفي ('+fmtD(cost)+')');
+  c.cash-=cost;c.inv.order={units:units,left:3};
+  toast('📦 طلب شحنة '+units+' وحدة — توصل بعد 3 أيام');
+  renderInv();renderCompany();
+}
+function toggleAutoOrder(){
+  const c=S.company;if(!c)return;if(!c.inv)c.inv=invDef();
+  c.inv.auto=!c.inv.auto;
+  toast(c.inv.auto?'🔁 إعادة الطلب التلقائي مفعّلة':'إعادة الطلب التلقائي متوقفة');
+  renderInv();
+}
+function upgradeWarehouse(){
+  const c=S.company;if(!c)return;if(!c.inv)c.inv=invDef();
+  const cost=25000;
+  if(c.cash<cost)return toast('❌ الخزينة لا تكفي ('+fmtD(cost)+')');
+  c.cash-=cost;c.inv.cap+=4000;
+  toast('🏭 توسيع المخزن (+4,000 وحدة)');
+  renderInv();renderCompany();
+}
+function renderInv(){
+  const b=$('invBody');if(!b)return;
+  const c=S.company;
+  if(!c){b.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا.</div>';return;}
+  if(!c.inv)c.inv=invDef();
+  const u=Math.round(c.inv.units),cap=c.inv.cap;
+  const pct=Math.max(0,Math.min(100,Math.round(u/cap*100)));
+  const col=pct>40?'var(--up)':pct>15?'#f59e0b':'var(--dn)';
+  const prod=Math.round(c.workers*8*(1+0.5*((c.up&&c.up.line)||0))*(0.72+(c.morale||60)/100*0.56));
+  let h='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0"><span>المخزون</span><b style="color:'+col+'">'+u+' / '+cap+' وحدة</b></div>';
+  h+='<div style="height:9px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:4px 0 10px"><div style="height:100%;width:'+pct+'%;background:'+col+'"></div></div>';
+  h+='<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line);font-size:13.5px"><span>إنتاج اليوم</span><b>'+prod+' وحدة</b></div>';
+  h+='<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line);font-size:13.5px"><span>مبيعات فائتة اليوم (نفاد)</span><b style="color:'+(c.inv.missed>0?'var(--dn)':'var(--dim)')+'">'+(c.inv.missed||0)+' وحدة</b></div>';
+  if(c.inv.order){
+    h+='<div style="background:rgba(59,130,246,.12);border:1px solid var(--accent);border-radius:12px;padding:9px;margin:8px 0">🚚 شحنة '+c.inv.order.units+' وحدة في الطريق — توصل بعد '+c.inv.order.left+' يوم</div>';
+  }
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">';
+  [500,1500,5000].forEach(n=>{
+    h+='<button class="btnGhost" onclick="orderStock('+n+')" '+(c.inv.order||c.cash<n*3?'disabled':'')+'>اطلب '+n+' ('+fmtD(n*3)+')</button>';
+  });
+  h+='</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">'+
+    '<button class="btnGhost" onclick="toggleAutoOrder()">'+(c.inv.auto?'🔁 إعادة طلب تلقائي: مفعّلة':'🔁 إعادة طلب تلقائي: متوقفة')+'</button>'+
+    '<button class="btnGhost" onclick="upgradeWarehouse()" '+(c.cash<25000?'disabled':'')+'>🏭 توسيع المخزن (25.0 ألف د.)</button></div>';
+  b.innerHTML=h;
+}
 const CRISES=[
  {n:'تسريب شكاوى جودة',d:'عملاء نشروا صور منتجات معيبة على السوشيال',hit:0.8},
  {n:'اتهام بغش في الإعلان',d:'جهة رقابية فتحت تحقيقًا في إحدى الحملات',hit:0.7},
@@ -2103,7 +2182,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();renderHR();renderPerf();renderAcq();renderBrand();renderRep();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();renderHR();renderPerf();renderAcq();renderBrand();renderRep();renderInv();}
 
 /* تبويبات */
 function showPage(p){
@@ -3589,6 +3668,27 @@ if(location.hash==='#test'){
       ok('الأزمة تقلل الطلب',sOk>sBad);
       ok('السمعة العالية ترفع الطلب',sRep>sRepLow);
       cc.rep=50;cc.crisis=null;cc.brand=10;renderRep();
+      // المخزون وسلسلة التوريد
+      cc.inv=invDef();cc.cash=200000;cc.workers=60;cc.crisis=null;
+      renderInv();ok('بطاقة المخزون تعرض',$('invBody').innerHTML.includes('المخزون'));
+      const u0=cc.inv.units;runCompany();
+      ok('الإنتاج يزيد المخزون',cc.inv.units>u0-1000&&cc.inv.units>=0);
+      const cashI=cc.cash;orderStock(1500);
+      ok('طلب شحنة يخصم التكلفة',cc.inv.order&&cc.inv.order.left===3&&cc.cash===cashI-4500);
+      orderStock(500);
+      ok('شحنة واحدة في الطريق',cc.inv.order.units===1500);
+      const uBefore=cc.inv.units;
+      for(let i=0;i<3;i++)runCompany();
+      ok('الشحنة توصل بعد ٣ أيام',cc.inv.order===null&&cc.inv.units>uBefore-2000);
+      cc.inv.units=0;cc.inv.cap=6000;cc.inv.order=null;cc.workers=10;cc.price=5;cc.staff={eng:0,sales:0,mkt:0};cc.campaign=null;cc.crisis=null;
+      RNG=()=>0.5;runCompany();RNG=Rc;
+      ok('نفاد المخزون يسبب مبيعات فائتة',cc.inv.missed>0&&cc.inv.stockDays>=1);
+      cc.inv.units=0;cc.inv.auto=true;cc.cash=200000;
+      runCompany();
+      ok('إعادة الطلب التلقائي تشتغل',!!cc.inv.order&&cc.inv.auto);
+      const capI=cc.inv.cap;cc.cash=200000;upgradeWarehouse();
+      ok('توسيع المخزن يرفع السعة',cc.inv.cap===capI+4000);
+      cc.inv=invDef();cc.inv.auto=false;renderInv();
       const keepC=S.company;
       S.company={name:'قديمة',sector:'تقنية',cash:1000,price:40,rd:0,marketing:0,workers:10,quality:10,track:[]};
       migrate();
