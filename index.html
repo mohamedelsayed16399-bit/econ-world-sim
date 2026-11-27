@@ -368,6 +368,7 @@ tr.row:hover,tr.row.sel{background:#182442}
     <div class="card">
       <h3 id="coTitle">شركتي</h3>
       <div class="kpis" id="coKpis"></div>
+      <div id="healthBody" style="margin-top:12px"></div>
     </div>
     <div class="card">
       <h3>الإدارة اليومية</h3>
@@ -1185,7 +1186,7 @@ function runCompany(){
   const salesBoost=1+(c.staff.sales||0)*0.08;
   const demand=Math.max(0,c.workers*8*capacity*priceFactor*(0.6+0.4*Math.tanh(marketing))*(1+sectorMood*0.5)*rivalF*salesBoost*strikeF*campF*crisisF*repF*(1+c.brand/400)*prod*rnd(0.85,1.15));
   if(!c.inv)c.inv=invDef();
-  const production=c.workers*8*capacity*prod;
+  const production=c.workers*8*capacity*prod*(c.strike?0.35:1);
   c.inv.units=Math.min(c.inv.cap,c.inv.units+production);
   if(c.inv.order){
     c.inv.order.left--;
@@ -1205,8 +1206,8 @@ function runCompany(){
   c.inv.missed=Math.round(lost);
   if(lost>1){
     c.inv.stockDays=(c.inv.stockDays||0)+1;
-    c.rep=Math.max(0,(c.rep||50)-0.4);
-    c.brand=Math.max(0,(c.brand||10)-0.15);
+    c.rep=Math.max(0,(c.rep||50)-0.8);
+    c.brand=Math.max(0,(c.brand||10)-0.4);
     if(c.inv.stockDays===3)pushNews(S,'📦 نفاد مخزون في "'+c.name+'" — عملاء خرجوا بدون شراء',-0.01,true,true);
   }else c.inv.stockDays=0;
   const revenue=sold*c.price;
@@ -1877,6 +1878,50 @@ function renderCompany(){
   $('vWk').textContent=c.workers;
   $('sPrice').value=c.price;$('sRd').value=c.rd;$('sMk').value=c.marketing;$('sWk').value=c.workers;
 }
+function healthScore(){
+  const c=S.company;if(!c)return null;
+  const h=c.hist||[];
+  let trend=0.5;
+  if(h.length>=6){
+    const a=h.slice(-3).reduce((x,y)=>x+y.p,0)/3;
+    const b=h.slice(-6,-3).reduce((x,y)=>x+y.p,0)/3;
+    trend=Math.max(0,Math.min(1,0.5+(a-b)/Math.max(1000,Math.abs(b))*0.5));
+  }
+  const invFill=c.inv?Math.min(1,c.inv.units/Math.max(1,c.inv.cap*0.35)):0.5;
+  const parts=[
+   {k:'رضا الفريق',v:(c.morale==null?60:c.morale)/100,w:0.2,tip:'ارفع مستوى الرواتب أو قلّل عدد العمال'},
+   {k:'الجودة',v:(c.quality||0)/100,w:0.2,tip:'زود الإنفاق على الجودة أو عيّن مهندس جودة'},
+   {k:'العلامة التجارية',v:(c.brand==null?10:c.brand)/100,w:0.15,tip:'شغّل حملة تسويق'},
+   {k:'السمعة',v:(c.rep==null?50:c.rep)/100,w:0.2,tip:'عالج الأزمات فورًا'},
+   {k:'المخزون',v:invFill,w:0.1,tip:'اطلب شحنة قبل ما المخزون يخلص'},
+   {k:'اتجاه الربح',v:trend,w:0.15,tip:'حسّن الهامش أو خفّض التكاليف'}
+  ];
+  const score=Math.round(parts.reduce((s,p)=>s+p.v*p.w,0)*100);
+  return {score:score,parts:parts};
+}
+function renderHealth(){
+  const b=$('healthBody');if(!b)return;
+  const c=S.company;
+  if(!c){b.innerHTML='';return;}
+  const hs=healthScore();if(!hs)return;
+  const sc=hs.score;
+  const col=sc>=70?'var(--up)':sc>=45?'#f59e0b':'var(--dn)';
+  const grade=sc>=85?'A':sc>=70?'B':sc>=45?'C':'D';
+  let h='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0"><span style="font-size:14px">❤️ صحة الشركة</span><b style="font-size:22px;color:'+col+'">'+sc+'/100 · '+grade+'</b></div>';
+  h+='<div style="height:10px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:2px 0 10px"><div style="height:100%;width:'+sc+'%;background:'+col+'"></div></div>';
+  hs.parts.forEach(p=>{
+    const v=Math.round(p.v*100);
+    const pc=v>=60?'var(--up)':v>=40?'#f59e0b':'var(--dn)';
+    h+='<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:13px"><span style="color:var(--dim)">'+p.k+'</span><b style="color:'+pc+'">'+v+'%</b></div>';
+  });
+  const warns=hs.parts.filter(p=>p.v<0.45);
+  if(warns.length){
+    h+='<div style="margin-top:8px;background:rgba(239,68,68,.1);border:1px solid var(--dn);border-radius:10px;padding:8px;font-size:12.5px">⚠️ تحذيرات: '+warns.map(w=>w.k+' — '+w.tip).join(' · ')+'</div>';
+  }else{
+    h+='<div style="margin-top:8px;color:var(--up);font-size:12.5px">✔ كل المؤشرات في نطاق آمن</div>';
+  }
+  b.innerHTML=h;
+}
 function invDef(){return {units:2000,cap:6000,order:null,auto:false,missed:0,stockDays:0};}
 function orderStock(units){
   const c=S.company;if(!c)return toast('أسّس شركة أولًا');
@@ -2182,7 +2227,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();renderHR();renderPerf();renderAcq();renderBrand();renderRep();renderInv();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();renderHR();renderPerf();renderAcq();renderBrand();renderRep();renderInv();renderHealth();}
 
 /* تبويبات */
 function showPage(p){
@@ -3689,6 +3734,33 @@ if(location.hash==='#test'){
       const capI=cc.inv.cap;cc.cash=200000;upgradeWarehouse();
       ok('توسيع المخزن يرفع السعة',cc.inv.cap===capI+4000);
       cc.inv=invDef();cc.inv.auto=false;renderInv();
+      // صحة الشركة + موازنة الإضراب والنفاد
+      cc.morale=85;cc.quality=80;cc.brand=70;cc.rep=75;cc.inv.units=2500;
+      const hsGood=healthScore();
+      cc.morale=20;cc.quality=10;cc.brand=5;cc.rep=15;cc.inv.units=0;
+      const hsBad=healthScore();
+      ok('صحة الشركة تُحسب',$('healthBody')&&hsGood.score>hsBad.score&&hsBad.score>=0&&hsGood.score<=100);
+      renderHealth();ok('لوحة الصحة تعرض',$('healthBody').innerHTML.includes('صحة الشركة'));
+      cc.quality=10;cc.morale=20;renderHealth();
+      ok('تحذيرات تظهر عند تدهور المؤشرات',$('healthBody').innerHTML.includes('تحذيرات'));
+      cc.morale=85;cc.quality=80;cc.brand=70;cc.rep=75;cc.inv.units=2500;
+      cc.hist=[1,2,3,4,5,6].map(x=>({r:1000,p:x*1000,s:10,m:60}));
+      renderHealth();
+      ok('رسالة الأمان تظهر عند المؤشرات الجيدة',$('healthBody').innerHTML.includes('كل المؤشرات'));
+      // الإضراب يوقف جزء من الإنتاج
+      cc.inv=invDef();cc.workers=60;cc.crisis=null;cc.strike=null;cc.morale=60;cc.price=200;
+      cc.staff={eng:0,sales:0,mkt:0};cc.campaign=null;
+      const uS0=cc.inv.units;runCompany();const prodNo=cc.inv.units-uS0;
+      cc.inv.units=1000;cc.strike={days:1,asked:120};
+      const uS1=cc.inv.units;runCompany();const prodStr=cc.inv.units-uS1;
+      cc.strike=null;
+      ok('الإضراب يقلل الإنتاج',prodStr<prodNo&&prodNo>0);
+      // النفاد يضرب العلامة والسمعة أقسى
+      cc.inv.units=0;cc.inv.order=null;cc.workers=10;cc.price=5;cc.brand=50;cc.rep=60;cc.crisis=null;cc.campaign=null;
+      const b0=cc.brand,r0=cc.rep;
+      RNG=()=>0.5;runCompany();RNG=Rc;
+      ok('النفاد يخصم العلامة والسمعة',cc.brand<b0&&cc.rep<r0);
+      cc.inv=invDef();cc.workers=60;cc.price=40;renderAll();
       const keepC=S.company;
       S.company={name:'قديمة',sector:'تقنية',cash:1000,price:40,rd:0,marketing:0,workers:10,quality:10,track:[]};
       migrate();
