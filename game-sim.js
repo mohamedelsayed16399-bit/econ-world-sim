@@ -1,82 +1,3 @@
-function kpi(l,v){return '<div class="kpi"><b>'+v+'</b><span>'+l+'</span></div>';}
-function renderCompany(){
-  const c=S.company;
-  $('coFound').classList.toggle('hidden',!!c);
-  $('coPanel').classList.toggle('hidden',!c);
-  if(!c)return;
-  $('coTitle').textContent=c.name+' — قطاع '+c.sector;
-  $('coKpis').innerHTML=
-    kpi('خزينة الشركة',fmtD(c.cash))+kpi('قيمة الشركة',fmtD(companyValue()))+
-    kpi('مبيعات اليوم',c.todaySold||0)+kpi('ربح اليوم',fmtD(c.todayProfit||0))+
-    kpi('الجودة',c.quality.toFixed(0)+'/100')+kpi('العمال',c.workers)+
-    kpi('رضا الفريق',Math.round(c.morale)+'%')+kpi('طاقم الإدارة',staffLevel(c)+'/15');
-  $('vPrice').textContent=c.price+' د.';
-  $('vRd').textContent=fmtD(c.rd);
-  $('vMk').textContent=fmtD(c.marketing);
-  $('vWk').textContent=c.workers;
-  $('sPrice').value=c.price;$('sRd').value=c.rd;$('sMk').value=c.marketing;$('sWk').value=c.workers;
-}
-const RIVAL_CORPS=['مجموعة الشرق','نور القابضة','الاتحاد الصناعي','دلتا تكنولوجيز','البحر الأحمر للصناعة'];
-function initCorp(){
-  if(S.corp&&S.corp.length)return;
-  S.corp=RIVAL_CORPS.map(n=>({n:n,rep:Math.round(rnd(40,80)),brand:Math.round(rnd(35,80)),value:Math.round(rnd(250000,1500000))}));
-}
-function corpRows(){
-  initCorp();
-  const rows=S.corp.map(c=>({n:c.n,rep:Math.round(c.rep),brand:Math.round(c.brand),value:Math.round(c.value),me:false}));
-  if(S.company)rows.push({n:S.company.name+' (أنت)',rep:Math.round(S.company.rep==null?50:S.company.rep),brand:Math.round(S.company.brand==null?10:S.company.brand),value:Math.round(companyValue()),me:true});
-  rows.forEach(r=>{r.score=r.value+r.rep*800+r.brand*600;});
-  rows.sort((a,b)=>b.score-a.score);
-  return rows;
-}
-function marketShare(){
-  const rows=corpRows();
-  const total=rows.reduce((s,r)=>s+r.value,0)||1;
-  const mine=rows.filter(r=>r.me).reduce((s,r)=>s+r.value,0);
-  return {mine:mine/total*100,top:rows[0]?(rows[0].value/total*100):0,rank:rows.findIndex(r=>r.me)+1,total:total};
-}
-function runContest(){
-  const rows=corpRows();
-  if(!rows.length)return;
-  const top=rows[0];const wk=Math.floor(S.day/7);const prize=30000;
-  if(!S.contests)S.contests=[];
-  S.contests.push({w:wk,n:top.n,me:!!top.me,score:Math.round(top.score)});
-  if(S.contests.length>8)S.contests.shift();
-  if(top.me&&S.company){
-    S.company.cash+=prize;
-    S.company.brand=Math.min(100,(S.company.brand==null?10:S.company.brand)+8);
-    pushNews(S,'🏆 "'+S.company.name+'" شركة الأسبوع — جايزة '+fmtD(prize)+' و+8 علامة',0.02,true,true);
-    toast('🏆 شركة الأسبوع! +'+fmtD(prize)+' و+8 علامة');
-  }else{
-    pushNews(S,'🏆 "'+top.n+'" شركة الأسبوع في السوق لهذا الأسبوع',0.005,false,true);
-  }
-}
-function renderCorp(){
-  const b=$('corpBody');if(!b)return;
-  const rows=corpRows();
-  const myIdx=rows.findIndex(r=>r.me);
-  const G='display:grid;grid-template-columns:2.2fr 0.7fr 0.7fr 1.2fr;gap:6px';
-  let h='<div style="'+G+';font-size:12px;color:var(--dim);padding:4px 2px;border-bottom:1px solid var(--line)"><span>الشركة</span><span>سمعة</span><span>علامة</span><span>القيمة</span></div>';
-  rows.forEach((r,i)=>{
-    const bg=r.me?'background:rgba(59,130,246,.12);border-radius:8px;':'';
-    h+='<div style="'+G+';font-size:12.5px;padding:6px 2px;border-bottom:1px solid var(--line);'+bg+'"><span>'+(i+1)+'. '+(r.me?'<b>'+r.n+'</b>':r.n)+'</span><span>'+r.rep+'</span><span>'+r.brand+'</span><span>'+fmtD(r.value)+'</span></div>';
-  });
-  const ms=marketShare();
-  h+='<div style="margin-top:10px;font-size:12.5px;color:var(--dim)">حصة السوق: <b style="color:var(--txt)">'+ms.mine.toFixed(1)+'%</b> · المتصدر '+ms.top.toFixed(1)+'%</div>';
-  h+='<div style="height:8px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:4px 0 6px"><div style="height:100%;width:'+Math.min(100,ms.mine).toFixed(1)+'%;background:var(--accent)"></div></div>';
-  if(S.contests&&S.contests.length){
-    h+='<div style="margin-top:8px;font-size:12px;color:var(--dim)">آخر أبطال الأسبوع: '+S.contests.slice(-3).reverse().map(c=>'<b style="color:'+(c.me?'var(--up)':'var(--txt)')+'">'+c.n+'</b>').join(' · ')+'</div>';
-  }
-  if(myIdx<0){
-    h+='<div style="margin-top:8px;color:var(--dim);font-size:12.5px">أسّس شركة عشان تدخل الترتيب.</div>';
-  }else if(myIdx===0){
-    h+='<div style="margin-top:8px;color:var(--up);font-size:12.5px">👑 أنت رقم ١ في السوق — حافظ على الصدارة</div>';
-  }else{
-    const above=rows[myIdx-1];const need=Math.max(0,above.score-rows[myIdx].score);
-    h+='<div style="margin-top:8px;font-size:12.5px">للصعود مركزًا: محتاج <b>'+fmtD(Math.round(need))+'</b> قوة زيادة على "'+above.n+'" (قيمة + سمعة×800 + علامة×600)</div>';
-  }
-  b.innerHTML=h;
-}
 function healthScore(){
   const c=S.company;if(!c)return null;
   const h=c.hist||[];
@@ -126,7 +47,7 @@ function orderStock(units){
   const c=S.company;if(!c)return toast('أسّس شركة أولًا');
   if(!c.inv)c.inv=invDef();
   if(c.inv.order)return toast('في شحنة في الطريق بالفعل');
-  const cost=Math.round(units*3);
+  const cost=Math.round(units*supCost());
   if(c.cash<cost)return toast('❌ الخزينة لا تكفي ('+fmtD(cost)+')');
   c.cash-=cost;c.inv.order={units:units,left:3};
   toast('📦 طلب شحنة '+units+' وحدة — توصل بعد 3 أيام');
@@ -164,11 +85,155 @@ function renderInv(){
   }
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">';
   [500,1500,5000].forEach(n=>{
-    h+='<button class="btnGhost" onclick="orderStock('+n+')" '+(c.inv.order||c.cash<n*3?'disabled':'')+'>اطلب '+n+' ('+fmtD(n*3)+')</button>';
+    h+='<button class="btnGhost" onclick="orderStock('+n+')" '+(c.inv.order||c.cash<n*supCost()?'disabled':'')+'>اطلب '+n+' ('+fmtD(n*supCost())+')</button>';
   });
   h+='</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">'+
     '<button class="btnGhost" onclick="toggleAutoOrder()">'+(c.inv.auto?'🔁 إعادة طلب تلقائي: مفعّلة':'🔁 إعادة طلب تلقائي: متوقفة')+'</button>'+
     '<button class="btnGhost" onclick="upgradeWarehouse()" '+(c.cash<25000?'disabled':'')+'>🏭 توسيع المخزن (25.0 ألف د.)</button></div>';
+  b.innerHTML=h;
+}
+
+const SUP_NAMES=['مصنع النيل','الشرق للتوريد','مجموعة الدلتا','مؤسسة الحرية','توريدات الإسكندرية','مصنع الأمل'];
+function supDef(){return {active:null,offers:[],history:[],deals:0};}
+function genSupOffers(){
+  const c=S.company;if(!c)return [];
+  if(!c.sup)c.sup=supDef();
+  const pick=[];const used={};
+  for(let i=0;i<3;i++){
+    let n,guard=0;
+    do{n=SUP_NAMES[Math.floor(RNG()*SUP_NAMES.length)];guard++;}while(used[n]&&guard<25);
+    used[n]=1;
+    const tier=Math.floor(RNG()*3);
+    const unitCost=+(rnd(2.1,2.7)+tier*0.55).toFixed(2);
+    const reliability=Math.min(0.99,+(0.72+tier*0.09+rnd(-0.03,0.05)).toFixed(2));
+    const quality=Math.round(rnd(0,3)+tier*3);
+    const volume=Math.round(rnd(600,1400)/100)*100;
+    pick.push({name:n,unitCost:unitCost,reliability:reliability,quality:quality,volume:volume,term:30,tier:tier,neg:0,declined:false,fee:Math.round(unitCost*volume*2)});
+  }
+  c.sup.offers=pick;
+  return pick;
+}
+function supOffers(){
+  const c=S.company;if(!c)return [];
+  if(!c.sup)c.sup=supDef();
+  if(!c.sup.offers||!c.sup.offers.length)genSupOffers();
+  return c.sup.offers;
+}
+function supCost(){const c=S.company;return (c&&c.sup&&c.sup.active)?c.sup.active.unitCost:3;}
+function negotiateSup(i,style){
+  const c=S.company;if(!c)return false;
+  const o=supOffers()[i];if(!o||o.declined||o.neg>=2)return false;
+  const rep=(c.rep==null?50:c.rep)/100,br=(c.brand==null?10:c.brand)/100;
+  if(style==='hard'){
+    if(RNG()<0.35+rep*0.4+br*0.2){
+      o.unitCost=+(o.unitCost*0.88).toFixed(2);
+      o.reliability=Math.max(0.6,+(o.reliability-0.05).toFixed(2));
+      o.quality=Math.max(0,o.quality-2);o.neg++;
+      toast('💪 '+o.name+' وافق على خصم ١٢٪');
+    }else{
+      o.declined=true;o.neg=2;
+      toast('🚫 '+o.name+' رفض التفاوض — العرض اتقفل');
+    }
+  }else if(style==='fair'){
+    o.unitCost=+(o.unitCost*0.96).toFixed(2);o.neg++;
+    toast('🤝 '+o.name+' وافق على خصم ٤٪');
+  }else{
+    o.unitCost=+(o.unitCost*1.06).toFixed(2);
+    o.reliability=Math.min(0.99,+(o.reliability+0.05).toFixed(2));
+    o.quality=o.quality+4;o.neg++;
+    toast('⭐ اتفاقية ممتازة مع '+o.name+' — التزام أعلى وجودة أحسن');
+  }
+  o.fee=Math.round(o.unitCost*o.volume*2);
+  c.sup.deals=(c.sup.deals||0)+1;
+  save();renderSup();renderCompany();
+  return true;
+}
+function negHard(i){return negotiateSup(i,'hard');}
+function negFair(i){return negotiateSup(i,'fair');}
+function negPrem(i){return negotiateSup(i,'prem');}
+function signSup(i){
+  const c=S.company;if(!c)return false;
+  if(!c.sup)c.sup=supDef();
+  if(c.sup.active)return false;
+  const o=supOffers()[i];if(!o||o.declined)return false;
+  if(c.cash<o.fee)return false;
+  c.cash-=o.fee;
+  c.sup.active={name:o.name,unitCost:o.unitCost,reliability:o.reliability,quality:o.quality,volume:o.volume,term:o.term,endDay:S.day+o.term,fee:o.fee};
+  c.sup.offers=[];
+  c.sup.history.push({d:S.day,n:o.name,cost:o.unitCost});
+  if(c.sup.history.length>6)c.sup.history.shift();
+  toast('🤝 عقد توريد مع '+o.name+' — '+o.term+' يوم بسعر '+o.unitCost.toFixed(2)+'/وحدة');
+  pushNews(S,'🤝 "'+c.name+'" توقّع عقد توريد مع "'+o.name+'" لمدة '+o.term+' يوم',0.01,true,true);
+  save();renderSup();renderInv();renderCompany();
+  return true;
+}
+function cancelSup(){
+  const c=S.company;if(!c||!c.sup||!c.sup.active)return false;
+  const a=c.sup.active;
+  const pen=Math.round(a.unitCost*a.volume*2);
+  if(c.cash<pen)return false;
+  c.cash-=pen;
+  c.rep=Math.max(0,(c.rep==null?50:c.rep)-3);
+  c.sup.active=null;c.sup.offers=[];
+  toast('📄 فسخت العقد — غرامة '+fmtD(pen)+' وسمعة −3');
+  pushNews(S,'📄 "'+c.name+'" فسخت عقد التوريد مع "'+a.name+'"',-0.01,false,true);
+  save();renderSup();renderInv();renderCompany();
+  return true;
+}
+function supTick(){
+  const c=S.company;if(!c||!c.sup||!c.sup.active)return;
+  const a=c.sup.active;
+  if(a.quality>0)c.quality=Math.min(100,(c.quality||0)+a.quality*0.02);
+  if(S.day>=a.endDay){
+    c.sup.active=null;c.sup.offers=[];
+    toast('📄 انتهى عقد التوريد مع '+a.name+' — اختار مورد جديد');
+    pushNews(S,'📄 انتهى عقد توريد "'+c.name+'" مع "'+a.name+'"',0,false,true);
+  }
+}
+function renderSup(){
+  const b=$('supBody');if(!b)return;
+  const c=S.company;
+  if(!c){b.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا.</div>';return;}
+  if(!c.sup)c.sup=supDef();
+  const a=c.sup.active;
+  let h='';
+  if(a){
+    const left=Math.max(0,a.endDay-S.day);
+    const G='display:grid;grid-template-columns:repeat(3,1fr);gap:6px';
+    h+='<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">'+a.name+'</b><span style="font-size:12px;color:var(--dim)">عقد ساري</span></div>';
+    h+='<div style="'+G+';margin-top:8px;font-size:12px;color:var(--dim)">'+
+      '<div>سعر الوحدة<br><b style="color:var(--txt);font-size:12.5px">'+a.unitCost.toFixed(2)+' د.</b></div>'+
+      '<div>الالتزام بالتسليم<br><b style="color:var(--txt);font-size:12.5px">'+Math.round(a.reliability*100)+'%</b></div>'+
+      '<div>دفعة الجودة<br><b style="color:var(--txt);font-size:12.5px">+'+a.quality+'</b></div>'+
+      '<div>حجم الشحنة<br><b style="color:var(--txt);font-size:12.5px">'+a.volume+' وحدة</b></div>'+
+      '<div>باقي من العقد<br><b style="color:'+(left<=5?'#f59e0b':'var(--txt)')+';font-size:12.5px">'+left+' يوم</b></div>'+
+      '<div>تكلفة ١٠٠٠ وحدة<br><b style="color:var(--up);font-size:12.5px">'+fmtD(a.unitCost*1000)+'</b></div></div>';
+    h+='<div class="tradeRow" style="margin-top:8px"><button class="btnGhost" onclick="cancelSup()" '+(c.cash<Math.round(a.unitCost*a.volume*2)?'disabled':'')+'>📄 افسخ العقد (غرامة '+fmtD(a.unitCost*a.volume*2)+')</button></div>';
+  }else{
+    const os=supOffers();
+    h+='<div style="font-size:12.5px;color:var(--dim);margin-bottom:6px">موردين قدّموا عروض — فاوض على السعر أو وقّع. التكلفة الافتراضية بدون عقد ٣.٠٠ د./وحدة.</div>';
+    os.forEach(function(o,i){
+      const tierTxt=o.tier===2?'ممتاز':(o.tier===1?'متوسط':'رخيص');
+      h+='<div style="border:1px solid var(--line);border-radius:12px;padding:9px;margin-top:8px'+(o.declined?';opacity:.5':'')+'">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:13px">'+o.name+'</b><span style="font-size:11.5px;color:var(--dim)">'+tierTxt+' · تفاوض '+(o.neg||0)+'/2</span></div>'+
+        '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px;font-size:11.5px;color:var(--dim)">'+
+          '<div>السعر<br><b style="color:var(--txt)">'+o.unitCost.toFixed(2)+'</b></div>'+
+          '<div>التسليم<br><b style="color:var(--txt)">'+Math.round(o.reliability*100)+'%</b></div>'+
+          '<div>الجودة<br><b style="color:var(--txt)">+'+o.quality+'</b></div>'+
+          '<div>الشحنة<br><b style="color:var(--txt)">'+o.volume+'</b></div></div>'+
+        (o.declined?'<div style="font-size:11.5px;color:var(--dn);margin-top:6px">🚫 رفض التفاوض وانسحب</div>':
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">'+
+          '<button class="btnGhost" style="font-size:11.5px" onclick="negHard('+i+')" '+(o.neg>=2?'disabled':'')+'>💪 تفاوض صارم</button>'+
+          '<button class="btnGhost" style="font-size:11.5px" onclick="negFair('+i+')" '+(o.neg>=2?'disabled':'')+'>🤝 خصم ٤٪</button>'+
+          '<button class="btnGhost" style="font-size:11.5px" onclick="negPrem('+i+')" '+(o.neg>=2?'disabled':'')+'>⭐ اتفاقية ممتازة</button>'+
+          '<button class="btnShort" style="font-size:11.5px" onclick="signSup('+i+')" '+(c.cash<o.fee?'disabled':'')+'>وقّع ('+fmtD(o.fee)+')</button>'+
+        '</div>')+
+      '</div>';
+    });
+  }
+  if(c.sup.history&&c.sup.history.length){
+    h+='<div style="margin-top:8px;font-size:11.5px;color:var(--dim)">آخر العقود: '+c.sup.history.slice(-3).reverse().map(function(x){return x.n+' ('+x.cost.toFixed(2)+')';}).join(' · ')+'</div>';
+  }
   b.innerHTML=h;
 }
 const CRISES=[
@@ -426,7 +491,7 @@ function refreshNewsUI(){
   const items=Object.values(S.assets).slice(0,18).map(a=>{const ch=chgPct(a);return '<span><b>'+a.name+'</b> '+money2(a.price)+' <b style="color:'+(ch>=0?'var(--up)':'var(--down)')+'">'+(ch>=0?'▲':'▼')+Math.abs(ch).toFixed(1)+'%</b></span>';}).join('');
   $('ticker').innerHTML=items+items;
 }
-function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();renderHR();renderPerf();renderAcq();renderBrand();renderRep();renderInv();renderHealth();renderCorp();}
+function renderAll(){renderHead();renderMarket();renderAsset();renderPortfolio();renderBank();renderCompany();renderRanks();renderIdx();renderAchv();renderIPO();renderPend();renderDonut();renderStats();renderUpg();renderGoal();renderProps();renderBonds();renderRival();renderQuests();renderLotto();renderMood();renderNotifs();renderMovers();renderGEvent();renderDepth();renderPrestige();renderBranches();renderChallenge();renderOptions();renderAutopilot();renderWeekly();renderHeatmap();renderTA();renderMining();renderAuction();renderFG();renderIns();renderShare();renderDivCal();renderQuiz();renderDuel();renderFunds();renderDailyRecap();renderConf();renderVC();renderMargin();renderBench();renderBackup();renderEconCal();renderHF();renderOrders();renderMacro();renderHR();renderPerf();renderAcq();renderBrand();renderRep();renderInv();renderHealth();renderCorp();renderSup();}
 
 function showPage(p){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.p===p));
@@ -966,22 +1031,4 @@ function renderBench(){
   '<span>أداؤك: <b class="chg '+(you>=0?'up':'dn')+'">'+(you>=0?'+':'')+you.toFixed(1)+'%</b></span>'+
   '<span>السوق: <b class="chg '+(mkt>=0?'up':'dn')+'">'+(mkt>=0?'+':'')+mkt.toFixed(1)+'%</b></span>'+
   '<span class="badge" style="background:'+(beat?'#14532d':'#3f1d1d')+';color:'+(beat?'#86efac':'#fca5a5')+'">'+(beat?'🔥 متفوق على السوق':'🐢 متأخر عن السوق')+'</span></div>';
-}
-function renderBackup(){
-  const be=$('btnExp');if(!be)return;
-  be.onclick=()=>{
-    const t=JSON.stringify(S);
-    $('impTxt').value=t;
-    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(()=>toast('💾 الحفظ اتنسخ — احتفظ بيه في مكان آمن'),()=>toast('💾 الحفظ في الصندوق تحت — انسخه يدويًا'));
-    else toast('💾 الحفظ في الصندوق تحت — انسخه يدويًا');
-  };
-  $('btnImp').onclick=()=>{
-    try{
-      const o=JSON.parse($('impTxt').value);
-      if(!o||!o.assets||o.cash==null)throw 0;
-      try{localStorage.setItem('econBackup1',JSON.stringify(S));}catch(e){}
-      S=o;migrate();save();renderAll();
-      toast('📥 تم استيراد الحفظ بنجاح');
-    }catch(e){toast('❌ نص حفظ غير صالح');}
-  };
-}
+                                             }
