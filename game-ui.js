@@ -528,6 +528,84 @@ function renderBid(){
   if(x.log&&x.log.length)h+='<div style="margin-top:8px;font-size:11.5px;color:var(--dim);line-height:1.7">'+x.log.slice(-4).reverse().map(function(y){return '• يوم '+y.d+': '+y.t;}).join('<br>')+'</div>';
   b.innerHTML=h;
 }
+
+function auditOf(){
+  if(!S.audit)S.audit={level:0,caught:0,lost:0,recovered:0,log:[]};
+  if(!S.audit.log)S.audit.log=[];
+  return S.audit;
+}
+function auditLog(t){
+  const a=auditOf();a.log.push({d:S.day,t:t});if(a.log.length>8)a.log.shift();
+}
+function auditFee(l){return [0,600,1500,3000][l||0];}
+function auditCost(l){return [0,15000,40000,90000][l||0];}
+function auditTick(c){
+  const a=auditOf();
+  if(!c)return;
+  if(a.level>0)c.cash-=auditFee(a.level);
+  const base=0.012*(1+Math.min(3,(c.workers||0)/120));
+  const leak=base*Math.pow(0.45,a.level);
+  const amt=Math.round(Math.max(0,c.cash)*leak);
+  if(amt>0){
+    c.cash-=amt;
+    a.lost=(a.lost||0)+amt;
+  }
+  if(amt>0&&RNG()<0.05*(1+a.level*0.5)){
+    auditLog('🕵️ تسريب '+fmtD(amt)+' من الخزينة');
+    if(a.level===0&&RNG()<0.5)pushNews(S,'🕵️ تسريب مالي في "'+c.name+'" — مفيش رقابة داخلية',-0.004,false,true);
+  }
+}
+function auditHire(){
+  const c=S.company;if(!c)return false;
+  const a=auditOf();
+  if(a.level>=3)return false;
+  const cost=auditCost(a.level+1);
+  if(c.cash<cost)return false;
+  c.cash-=cost;a.level++;
+  auditLog('🧾 تعيين مستوى تدقيق '+a.level+' ('+fmtD(cost)+' + رسوم يومية '+fmtD(auditFee(a.level))+')');
+  toast('🧾 مستوى التدقيق بقى '+a.level);
+  save();renderAll();
+  return true;
+}
+function auditInvestigate(){
+  const c=S.company;if(!c)return false;
+  const a=auditOf();
+  if(c.cash<8000)return false;
+  c.cash-=8000;
+  const chance=0.25+a.level*0.2;
+  if(RNG()<chance){
+    const back=Math.round(Math.min(a.lost||0,(c.cash||0)*0.06+2000));
+    c.cash+=back;a.caught=(a.caught||0)+1;a.recovered=(a.recovered||0)+back;
+    c.morale=Math.max(0,(c.morale||60)-3);
+    auditLog('✅ تحقيق كشف متورط — رجّع '+fmtD(back));
+    pushNews(S,'✅ "'+c.name+'" تكشف احتيالًا داخليًا وتستعيد '+fmtD(back),0.004,false,true);
+    toast('✅ مسكت المتورط — رجّعت '+fmtD(back));
+  }else{
+    c.morale=Math.max(0,(c.morale||60)-1);
+    auditLog('🔍 تحقيق ملقاش دليل واضح');
+    toast('🔍 التحقيق ملقاش دليل');
+  }
+  save();renderAll();
+  return true;
+}
+function renderAudit(){
+  const b=$('auditBody');if(!b)return;
+  const c=S.company;
+  if(!c){b.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا.</div>';return;}
+  const a=auditOf();
+  const leakPct=(0.012*(1+Math.min(3,(c.workers||0)/120))*Math.pow(0.45,a.level)*100).toFixed(2);
+  let h='<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12.5px;margin-bottom:6px">'+
+    '<span>مستوى التدقيق: <b>'+a.level+'/3</b></span>'+
+    '<span>تسريب متوقع: <b style="color:'+(a.level?'var(--up)':'var(--dn)')+'">'+leakPct+'٪ يوميًا</b></span>'+
+    '<span>إجمالي المسروق: <b>'+fmtD(a.lost||0)+'</b></span></div>';
+  h+='<div style="font-size:12px;color:var(--dim);margin-bottom:6px">استعدت '+fmtD(a.recovered||0)+' · تحقيقات ناجحة '+(a.caught||0)+'</div>';
+  h+='<div class="tradeRow">'+
+    '<button class="btnShort" onclick="auditHire()" '+(a.level>=3||c.cash<auditCost(a.level+1)?'disabled':'')+'>🧾 رفع التدقيق ('+fmtD(auditCost(a.level+1))+' + '+fmtD(auditFee(a.level+1))+'/يوم)</button>'+
+    '<button class="btnGhost" onclick="auditInvestigate()" '+(c.cash<8000?'disabled':'')+'>🔍 تحقيق مفاجئ (٨٬٠٠٠)</button>'+
+    '</div>';
+  if(a.log&&a.log.length)h+='<div style="margin-top:8px;font-size:11.5px;color:var(--dim);line-height:1.7">'+a.log.slice(-4).reverse().map(function(x){return '• يوم '+x.d+': '+x.t;}).join('<br>')+'</div>';
+  b.innerHTML=h;
+}
 $('btnPrestige').onclick=()=>{
   if(netWorth()<20000000)return;
   showModal('<h2>⭐ البدء كأسطورة</h2><p style="line-height:1.9">هتبدأ من الصفر بكاش أكبر ومضاعف أرباح دائم ×'+(1+0.15*((S.prestige||0)+1)).toFixed(2)+'. هتفقد كل أصولك وشركتك وتقدمك الحالي، وتحتفظ بإنجازاتك ونجومك.</p><div class="tradeRow"><button id="btnPrestigeYes">أكيد، ابدأ من جديد</button></div>');
