@@ -184,6 +184,9 @@ function migrate(){
   if(S.war.shield==null)S.war.shield=0;if(S.war.shieldDays==null)S.war.shieldDays=0;
   if(S.war.wins==null)S.war.wins=0;if(S.war.losses==null)S.war.losses=0;if(!S.war.log)S.war.log=[];
   if(S.war.blocked==null)S.war.blocked=0;
+  if(S.merger===undefined)S.merger=null;
+  if(S.fr===undefined)S.fr=null;
+  if(S.bid===undefined)S.bid=null;
   if(!S.allies)S.allies={list:[],pact:null,heat:0,fines:0,log:[]};
   if(!S.allies.list)S.allies.list=[];if(S.allies.pact===undefined)S.allies.pact=null;
   if(S.allies.heat==null)S.allies.heat=0;if(S.allies.fines==null)S.allies.fines=0;if(!S.allies.log)S.allies.log=[];
@@ -770,6 +773,8 @@ function runCompany(){
     c.cash+=branchProfit;
   }
   c.branchProfit=branchProfit;
+  frTick(c);
+  bidTick(c);
   c.cash+=pFinal;
   c.todayRev=revenue;c.todayProfit=pFinal;c.todaySold=Math.round(sold);c.todaySub=subRev;
   c.quality=Math.min(100,c.quality+c.rd/4000+c.up.auto*0.05+teamEff('eng',c)*0.012+allyQualityBonus());
@@ -1672,4 +1677,4 @@ function supTick(){
     toast('📄 انتهى عقد التوريد مع '+a.name+' — اختار مورد جديد');
     pushNews(S,'📄 انتهى عقد توريد "'+c.name+'" مع "'+a.name+'"',0,false,true);
   }
-                                                             }
+                }
