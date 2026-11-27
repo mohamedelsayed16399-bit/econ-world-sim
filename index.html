@@ -1766,15 +1766,16 @@ function renderHR(){
   const m=Math.round(c.morale);
   const face=m>=80?'😄':m>=55?'🙂':m>=35?'😐':'😠';
   const col=m>=55?'var(--up)':m>=35?'#f59e0b':'var(--dn)';
-  let h='<div class="row"><span>رضا الفريق '+face+'</span><b style="color:'+col+'">'+m+'%</b></div>';
+  const RW='display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px';
+  let h='<div style="'+RW+'"><span>رضا الفريق '+face+'</span><b style="color:'+col+'">'+m+'%</b></div>';
   h+='<div style="height:9px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:6px 0 12px"><div style="height:100%;width:'+m+'%;background:'+col+'"></div></div>';
   h+='<div class="sliderRow"><label><span>مستوى الرواتب مقابل السوق</span><b>'+Math.round(c.wage*100)+'%</b></label><input type="range" id="sWage" min="60" max="160" step="5" value="'+Math.round(c.wage*100)+'"></div>';
-  h+='<div class="row"><span>فاتورة الأجور اليومية</span><b>'+fmtD(Math.round(c.workers*22*c.wage))+'</b></div>';
-  h+='<div class="row"><span>رواتب طاقم الإدارة</span><b>'+fmtD(staffCost(c))+'</b></div>';
+  h+='<div style="'+RW+'"><span>فاتورة الأجور اليومية</span><b>'+fmtD(Math.round(c.workers*22*c.wage))+'</b></div>';
+  h+='<div style="'+RW+'"><span>رواتب طاقم الإدارة</span><b>'+fmtD(staffCost(c))+'</b></div>';
   STAFF.forEach(x=>{
     const lv=c.staff[x.k]||0;const cost=x.base*(lv+1);
     const dots='●'.repeat(lv)+'○'.repeat(5-lv);
-    h+='<div class="row" style="align-items:center;gap:8px;flex-wrap:wrap"><span>'+x.ic+' '+x.n+' <b style="color:var(--accent);letter-spacing:1px">'+dots+'</b><br><span style="color:var(--dim);font-size:12px">'+x.d+'</span></span>'+
+    h+='<div style="'+RW+';flex-wrap:wrap"><span>'+x.ic+' '+x.n+' <b style="color:var(--accent);letter-spacing:1px">'+dots+'</b><br><span style="color:var(--dim);font-size:12px">'+x.d+'</span></span>'+
       (lv>=5?'<b style="color:var(--up)">الحد الأقصى ✔</b>':'<button class="btnGhost" onclick="hireStaff(\''+x.k+'\')" '+(c.cash<cost?'disabled':'')+'>'+(lv?'ترقية':'تعيين')+' ('+fmtD(cost)+')</button>')+'</div>';
   });
   b.innerHTML=h;
