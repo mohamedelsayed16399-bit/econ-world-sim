@@ -1266,6 +1266,44 @@ function renderBoard(){
   el.innerHTML=h;
 }
 
+function wrOf(){
+  if(!S.wr)S.wr={day:S.day,nw:0,mkt:0,cards:[]};
+  const w=S.wr;if(!w.cards)w.cards=[];if(w.day==null)w.day=S.day;if(w.nw==null)w.nw=0;if(w.mkt==null)w.mkt=0;
+  return w;
+}
+function wrMkt(){
+  let t=0,n=0;for(const k in S.assets){const a=S.assets[k];if(a.kind==='stock'&&a.base){t+=a.price/a.base;n++;}}
+  return n?t/n:1;
+}
+function wrGrade(my,mk){
+  const d=my-mk;
+  if(d>=0.05)return 'A';if(d>=0.01)return 'B';if(d>=-0.02)return 'C';if(d>=-0.06)return 'D';return 'F';
+}
+function wrMake(){
+  const w=wrOf();const nw=netWorth(),mk=wrMkt();
+  if(!w.nw){w.nw=nw;w.mkt=mk;w.day=S.day;return null;}
+  const my=nw/w.nw-1,mm=mk/w.mkt-1;
+  const card={day:S.day,my:my,mkt:mm,g:wrGrade(my,mm),infl:S.infl,rate:S.rate,mood:S.mood};
+  w.cards.unshift(card);w.cards=w.cards.slice(0,6);
+  w.nw=nw;w.mkt=mk;w.day=S.day;
+  toast('📰 تقرير الأسبوع: تقدير '+card.g);
+  return card;
+}
+function wrTick(){
+  const w=wrOf();
+  if(!w.nw||(S.day-w.day)>=7)wrMake();
+}
+function renderWR(){
+  const el=$('wrBody');if(!el)return;
+  const w=wrOf();
+  if(!w.cards.length){el.innerHTML='<div style="color:var(--dim);font-size:13px">أول تقرير بعد '+Math.max(0,7-(S.day-w.day))+' يوم.</div>';return;}
+  const pc=function(x){return (x>=0?'+':'')+(x*100).toFixed(1)+'٪';};
+  el.innerHTML=w.cards.map(function(c,i){
+    const col=c.my>=c.mkt?'var(--up)':'var(--down)';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--line);padding:7px 0;font-size:12.5px;flex-wrap:wrap"><span>يوم '+c.day+' · أنت: <b style="color:'+col+'">'+pc(c.my)+'</b> · السوق: '+pc(c.mkt)+' · تضخم '+(c.infl*100).toFixed(1)+'٪ · فايدة '+(c.rate*100).toFixed(1)+'٪</span><b style="font-size:'+(i?15:22)+'px;color:'+col+'">'+c.g+'</b></div>';
+  }).join('');
+}
+
 const CRIS=[
   {k:'war',n:'حرب إقليمية',ic:'⚔️',dir:-1,days:8,msg:'خطوط الإمداد اتقطعت والتكاليف زادت'},
   {k:'pandemic',n:'جائحة عالمية',ic:'🦠',dir:-1,days:10,msg:'الطلب نزل والعمال بيغيبوا'},
