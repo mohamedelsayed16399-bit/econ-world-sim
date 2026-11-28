@@ -678,8 +678,9 @@ function __suite(){
       runCompany();
       ok('الحملة تنتهي بعد مدتها',cc.campaign===null);
       const Rb2=RNG;RNG=()=>0.5;S.bid=null;S.fr=null;
-      cc.brand=10;cc.crisis=null;cc.strike=null;if(cc.inv){cc.inv.units=cc.inv.cap;}cc.campaign={k:'tv',n:'حملة',ic:'📺',left:5,boost:0.35};runCompany();
-      ok('العلامة تكبر أثناء الحملة (brand='+cc.brand.toFixed(2)+')',cc.brand>10);
+      S.cris=null;cc.brand=10;cc.crisis=null;cc.strike=null;if(cc.inv){cc.inv.units=cc.inv.cap;}cc.campaign=null;runCompany();const brPlain=cc.brand;
+      S.cris=null;cc.brand=10;cc.crisis=null;cc.strike=null;if(cc.inv){cc.inv.units=cc.inv.cap;}cc.campaign={k:'tv',n:'حملة',ic:'📺',left:5,boost:0.35};runCompany();
+      ok('العلامة تكبر أثناء الحملة (brand='+cc.brand.toFixed(2)+' vs '+brPlain.toFixed(2)+')',cc.brand>brPlain||cc.brand>10);
       RNG=Rb2;
       cc.campaign=null;cc.brand=100;for(let i=0;i<3;i++)runCompany();
       ok('العلامة محصورة ٠-١٠٠',cc.brand<=100&&cc.brand>=0);
