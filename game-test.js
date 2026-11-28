@@ -1125,6 +1125,74 @@ function __suite(){
       ok('بطاقة السندات ترسم',$('cbondBody').innerHTML.includes('التصنيف'));
       S.cbonds=null;RNG=Rb2m;
     }
+    
+    if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
+    if(S.company){
+      const ct=S.company;const RtM=RNG;
+      ct.cash=500000;ct.rep=70;ct.quality=70;ct.workers=60;
+      if(!ct.inv)ct.inv=invDef();
+      ct.inv.units=500;
+      S.tenders=null;S.cbonds=null;S.audit=null;S.bid=null;S.fr=null;
+      RNG=()=>0.5;
+      ok('ملف المناقصات بيبدأ فاضي',tenderOf().list.length===0&&tenderOf().active.length===0);
+      ok('مناقصة بتظهر بالطلب',tenderSpawn(ct,true)===true&&tenderOf().list.length===1);
+      const T0=tenderOf().list[0];
+      ok('المناقصة ليها قيمة وتكلفة',T0.value>0&&T0.cost<T0.value);
+      const c0=ct.cash;
+      RNG=()=>0.01;
+      ok('التقديم بيدفع تأمين وبيكسب',tenderBid(0,'fair')===true&&ct.cash<c0&&tenderOf().active.length===1);
+      const act=tenderOf().active[0];const c1=ct.cash;
+      S.day=act.due;
+      tenderTick(ct);
+      ok('التسليم في الميعاد بيجيب صافي الربح',tenderOf().active.length===0&&ct.cash>c1&&tenderOf().won===1);
+      tenderSpawn(ct,true);
+      const c2=ct.cash;RNG=()=>0.99;
+      ok('الخسارة بترجع التأمين',tenderBid(0,'low')===true&&ct.cash===c2&&tenderOf().lost===1);
+      tenderSpawn(ct,true);RNG=()=>0.01;tenderBid(0,'fair');
+      const a2=tenderOf().active[0];const r0=ct.rep;ct.workers=2;ct.inv.units=0;S.day=a2.due;
+      tenderTick(ct);
+      ok('التأخير بيغرّم ويضرب السمعة',tenderOf().failed===1&&ct.rep<r0);
+      ct.cash=100;
+      ok('التأمين محتاج كاش',tenderBid(0,'fair')===false);
+      ct.cash=500000;renderTender();
+      ok('بطاقة المناقصات ترسم',$('tenderBody').innerHTML.includes('مناقصات'));
+      S.tenders=null;RNG=RtM;
+    }
+    
+    if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
+    if(S.company){
+      const cl=S.company;const RlM=RNG;
+      cl.cash=400000;cl.rep=70;cl.quality=70;cl.workers=60;
+      S.lobby=null;S.tenders=null;S.cbonds=null;S.audit=null;S.bid=null;S.fr=null;
+      RNG=()=>0.5;
+      ok('ملف اللوبي بيبدأ صفر',lobbyOf().level===0&&lobbyOf().heat===0);
+      const ch0=cl.cash;
+      ok('رفع النفوذ بيخصم',lobbyHire()===true&&lobbyOf().level===1&&cl.cash<ch0);
+      const cf0=cl.cash;lobbyTick(cl);
+      ok('رسوم يومية وحرارة بتزيد',cl.cash<cf0&&lobbyOf().heat>0);
+      ok('الحد الأقصى ٣',(function(){cl.cash=2000000;lobbyHire();lobbyHire();return lobbyHire()===false&&lobbyOf().level===3;})());
+      const h0=lobbyOf().heat;cl.cash=100000;
+      ok('التهدئة بتخصم وتنزل الحرارة',lobbyCool()===true&&lobbyOf().heat<h0);
+      ok('النفوذ بيرفع فرصة المناقصة',(function(){
+        const old=S.lobby;
+        S.lobby={level:0,heat:0,spent:0,scandals:0,log:[]};
+        S.tenders=null;tenderSpawn(cl,true);RNG=()=>0.70;
+        tenderBid(0,'fair');
+        const wonLow=tenderOf().active.length;
+        S.lobby={level:3,heat:0,spent:0,scandals:0,log:[]};
+        S.tenders=null;tenderSpawn(cl,true);RNG=()=>0.70;
+        tenderBid(0,'fair');
+        const wonHigh=tenderOf().active.length;
+        S.lobby=old;
+        return wonHigh>wonLow;})());
+      lobbyOf().heat=95;cl.cash=400000;cl.rep=70;RNG=()=>0.0;
+      const r0=cl.rep;
+      lobbyTick(cl);
+      ok('الفضيحة بتضرب السمعة والفلوس',lobbyOf().scandals>=1&&cl.rep<r0);
+      renderLobby();
+      ok('بطاقة اللوبي ترسم',$('lobbyBody').innerHTML.includes('النفوذ'));
+      S.lobby=null;RNG=RlM;
+    }
     renderAll();
     window.__testmode=0;save();ok('حفظ',!!localStorage.getItem('econLive1'));
     localStorage.removeItem('econLive1');window.__testmode=1;S=freshState();renderAll();
