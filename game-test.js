@@ -444,13 +444,15 @@ function __suite(){
     ok('إشارة فنية',$('taSignal').textContent.length>3);
     ok('أداء الممتلكات يعرض المراكز',$('taPl').querySelector('tbody').innerHTML.includes(S.assets[ak].name));
     
+    S.mining={rigs:0,upg:0,total:0};S.cash=Math.max(S.cash,100000);
     if(typeof renderMining==='function')renderMining();
     const mc0=S.cash;$('btnRig').click();
-    ok('شراء جهاز تعدين (rigs='+S.mining.rigs+' خصم='+Math.round(mc0-S.cash)+')',S.mining.rigs>=1&&(mc0-S.cash)>=5000);
+    ok('شراء جهاز تعدين (rigs='+S.mining.rigs+' خصم='+Math.round(mc0-S.cash)+')',S.mining.rigs===1&&(mc0-S.cash)>=5000);
     const mc1=S.cash;S.day++;endOfDay();
     ok('عائد تعدين يومي',S.mining.total>0&&S.cash>mc1);
+    S.cash=Math.max(S.cash,100000);
     if(typeof renderMining==='function')renderMining();
-    $('btnUpgM').click();ok('ترقية التعدين (upg='+S.mining.upg+')',S.mining.upg>=1);
+    $('btnUpgM').click();ok('ترقية التعدين (upg='+S.mining.upg+')',S.mining.upg===1);
     
     const svR=RNG;RNG=()=>0.1;
     const bk=Object.keys(S.assets).find(k=>S.assets[k].kind==='stock'&&!(S.company&&S.company.ticker===k));
