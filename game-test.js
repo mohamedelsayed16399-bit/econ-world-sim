@@ -1250,6 +1250,23 @@ function __suite(){
     
     if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
     if(S.company){
+      const cb=S.company;S.board=null;cb.cash=500000;cb.workers=100;S.day=50;
+      ok('المجلس جاهز في البداية',boardCan()===true&&boardOf().yes===0);
+      const w0=cb.workers;
+      ok('توسّع بيعدي (حذر+نمو)',boardPropose('expand')===true&&cb.workers===w0+15&&cb.cash===420000&&boardOf().yes===1);
+      ok('فترة انتظار بتمنع تصويت تاني',boardCan()===false&&boardPropose('rd')===false);
+      S.day=54;cb.cash=100000;
+      ok('الحذر بيرفض لما الكاش يقل',boardVotes('expand',cb)[0]===false);
+      ok('التوسع مرفوض بـ ١ من ٣',boardPropose('expand')===true&&boardOf().no===1&&cb.cash===100000);
+      S.day=60;cb.cash=600000;const sc1=S.cash;
+      ok('أرباح بتتحول للمحفظة',boardPropose('payout')===true&&S.cash===sc1+60000&&cb.cash===540000);
+      renderBoard();
+      ok('بطاقة المجلس ترسم',$('boardBody').innerHTML.includes('المجلس'));
+      S.board=null;
+    }
+    
+    if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
+    if(S.company){
       const cv=S.company;S.angel=null;cv.cash=100000;cv.workers=100;
       ok('التمويل بيبدأ فاضي',angelEq()===0);
       ok('A مقفولة من غير seed',angelRaise('a')===false);
