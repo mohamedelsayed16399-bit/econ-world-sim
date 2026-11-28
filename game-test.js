@@ -1247,6 +1247,38 @@ function __suite(){
       ok('قفل الخط بيشيله',smugClose(0)===true&&smugOf().routes.length===n0-1);
       S.smug=null;RNG=RsM;
     }
+    
+    if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
+    if(S.company){
+      const ct=S.company;const RtM=RNG;RNG=()=>0.5;
+      ct.cash=500000;ct.rep=70;S.tax=null;
+      const t0=taxOf();
+      ok('ملف الضرائب بيبدأ فاضي',t0.due===0&&t0.hidden===0&&t0.audits===0);
+      const acc=taxAccrue(ct,10000,5000);
+      ok('استحقاق = ١٤٪ مبيعات + ٢٢٪ ربح ('+Math.round(acc)+')',Math.round(acc)===Math.round(10000*TAX_VAT+5000*TAX_INC));
+      taxOf().hide=true;taxOf().next=S.day+10;
+      const acc2=taxAccrue(ct,10000,0);
+      ok('التسجيل الأقل بيخفض ٣٠٪ ويبني مخفي',Math.round(acc2)===Math.round(10000*TAX_VAT*0.7)&&taxOf().hidden>0);
+      taxOf().hide=false;taxOf().hidden=0;taxOf().due=40000;taxOf().next=S.day+10;
+      const cpay=ct.cash;
+      ok('سداد الإقرار بينزل الكاش ويصفّر المستحق',taxPay()===true&&ct.cash===cpay-40000&&taxOf().due===0);
+      ok('مش بيدفع إقرار فاضي',taxPay()===false);
+      taxOf().due=50000;taxOf().next=S.day+10;
+      ok('التقسيط بيقسم على ٥ أيام',taxSplit()===true&&taxOf().sched===10000);
+      const cs1=ct.cash;taxTick(ct);
+      ok('القسط بيتخصم يوميًا ('+Math.round(taxOf().due)+')',ct.cash===cs1-10000&&taxOf().due===40000);
+      taxOf().sched=0;taxOf().due=30000;taxOf().next=1;taxOf().late=0;
+      const d0=taxOf().due;taxTick(ct);
+      ok('تأخير الإقرار بيجيب غرامة ٣٪',taxOf().due>d0&&taxOf().late>=1);
+      taxOf().hidden=60000;taxOf().hide=true;RNG=()=>0.0;
+      const ca=ct.cash,rp=ct.rep;taxTick(ct);
+      ok('الفحص الضريبي بيغرّم ويضرب السمعة',taxOf().audits===1&&ct.cash<ca&&ct.rep<rp&&taxOf().hidden===0);
+      RNG=()=>0.5;ct.cash=100000;taxOf().hidden=20000;taxOf().due=0;renderTax();
+      ok('بطاقة الضرائب ترسم',$('taxBody').innerHTML.includes('المستحق'));
+      const cb=ct.cash;
+      ok('التسوية الذاتية بتشيل المخفي',taxSettle()===true&&taxOf().hidden===0&&ct.cash<cb);
+      S.tax=null;RNG=RtM;
+    }
     renderAll();
     window.__testmode=0;save();ok('حفظ',!!localStorage.getItem('econLive1'));
     localStorage.removeItem('econLive1');window.__testmode=1;S=freshState();renderAll();
