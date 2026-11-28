@@ -1342,9 +1342,10 @@ function __suite(){
       ok('سعر السهم بيتحرك',a.price!==p1&&a.price>0);
       ok('الاستحواذ مرفوض قبل ٥١٪',rIPOtakeover(0)===false);
       a.held=520;r0.listed[0].held=520;
+      S.cash=50000000;
       const nCorp=S.corp.length;
       ok('الاستحواذ بينجح عند ٥١٪',rIPOtakeover(0)===true&&r0.acquired.length===1&&r0.listed.length===0&&S.corp.length===nCorp-1);
-      ok('الاستحواذ بيدي دخل يومي',r0.acquired[0].daily>0);
+      ok('الاستحواذ بيدي دخل يومي',!!r0.acquired[0]&&r0.acquired[0].daily>0);
       const ca=S.company.cash;runCompany();
       ok('الدخل اليومي بيتضاف للشركة',S.company.cash!==ca&&S.company.rAcq>0);
       renderRIPO();
