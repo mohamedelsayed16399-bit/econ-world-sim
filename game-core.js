@@ -137,6 +137,7 @@ function migrate(){
   if(!S.tech)S.tech={lab:0,pts:0,got:{},earned:0,fees:0};
   if(!S.angel)S.angel={got:{},paid:0,gained:0,bought:0};
   if(!S.board)S.board={yes:0,no:0,last:-99,log:[]};
+  if(!S.wr)S.wr={day:S.day,nw:0,mkt:0,cards:[]};
   if(!S.contests)S.contests=[];
   if(S.pubAuc===undefined)S.pubAuc=null;
   if(S.nextAuc==null)S.nextAuc=0;
@@ -624,6 +625,7 @@ function endOfDay(){
   }
   S.nwHist.push(netWorth());
   if(S.nwHist.length>900)S.nwHist.shift();
+  wrTick();
   checkMilestones();
   
   if(S.company&&S.day%30===0)quarterReport();
@@ -1710,4 +1712,4 @@ function supTick(){
     toast('📄 انتهى عقد التوريد مع '+a.name+' — اختار مورد جديد');
     pushNews(S,'📄 انتهى عقد توريد "'+c.name+'" مع "'+a.name+'"',0,false,true);
   }
-             }
+      }
