@@ -1250,6 +1250,34 @@ function __suite(){
     
     if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
     if(S.company){
+      const ci2=S.company;const RbM=RNG;RNG=()=>0.5;
+      ci2.cash=400000;S.bizins=null;
+      const b0=bizOf();
+      ok('ملف التأمين بيبدأ فاضي',b0.claims===0&&b0.paid===0&&!b0.p.ops);
+      ok('تفعيل بوليصتين',bizToggle('ops')===true&&bizToggle('tax')===true&&bizOf().p.ops===true&&bizOf().p.tax===true);
+      const prem=bizPrem(BIZINS[0])+bizPrem(BIZINS[1]);
+      const cbi=ci2.cash;bizTick(ci2);
+      ok('القسط بيتخصم يوميًا ('+Math.round(prem)+')',ci2.cash===cbi-prem&&bizOf().premPaid===prem);
+      ok('مطالبة بدون بوليصه = صفر',bizClaim('cargo',10000)===0);
+      const paid0=bizOf().paid;
+      const back=bizClaim('ops',10000);
+      ok('المطالبة بتغطي ٧٠٪',back===7000&&bizOf().paid===paid0+7000&&bizOf().claims===1);
+      ok('المطالبة بتنزّل الثقة',bizOf().trust<50);
+      const prema=bizPrem(BIZINS[0]);bizOf().trust=20;
+      ok('الثقة الأقل = قسط أعلى',bizPrem(BIZINS[0])>prema);
+      ci2.cash=100;bizTick(ci2);
+      ok('الكاش مش كافي = البوليصات بتتلغي',!bizOf().p.ops&&!bizOf().p.tax);
+      ci2.cash=200000;bizOf().p.ops=true;bizOf().trust=50;
+      ci2.strike={days:1,asked:120};ci2.workers=60;ci2.wage=1;
+      const cst=ci2.cash;runCompany();
+      ok('الإضراب مع التأمين بيرجّع تعويض',bizOf().claims>=2&&ci2.cash!==cst);
+      ci2.strike=null;renderBizins();
+      ok('بطاقة التأمين التجاري ترسم',$('bizinsBody').innerHTML.includes('قسط يومي'));
+      S.bizins=null;RNG=RbM;
+    }
+    
+    if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
+    if(S.company){
       const ct=S.company;const RtM=RNG;RNG=()=>0.5;
       ct.cash=500000;ct.rep=70;S.tax=null;
       const t0=taxOf();
