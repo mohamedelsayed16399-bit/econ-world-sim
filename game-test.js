@@ -1250,6 +1250,33 @@ function __suite(){
     
     if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
     if(S.company){
+      const cr=S.company;S.tech=null;cr.cash=500000;cr.workers=100;
+      ok('المختبر بيبدأ فاضي',techOf().lab===0&&techOf().pts===0);
+      const cp0=cr.cash;
+      ok('ترقية المختبر بتخصم',techUpLab()===true&&techOf().lab===1&&cr.cash===cp0-25000);
+      const fee1=techFee();const cc1=cr.cash;
+      techTick(cr);
+      ok('التيك بيجمع نقاط ويخصم الرسوم',techOf().pts===3&&cr.cash===cc1-fee1);
+      ok('مش بيفتح تقنية من غير نقاط',techBuy('auto')===false);
+      techOf().pts=200;
+      ok('الذكاء الاصطناعي مقفول من غير أتمتة',techBuy('ai')===false);
+      ok('فتح الأتمتة',techBuy('auto')===true&&techOf().pts===170);
+      ok('مش بيفتحها مرتين',techBuy('auto')===false);
+      ok('الذكاء الاصطناعي بعد الأتمتة',techBuy('ai')===true);
+      ok('دخل التقنيات = ٨+١٤ لكل عامل',techDaily(cr)===100*22);
+      const cc2=cr.cash;techTick(cr);
+      ok('الدخل بيتضاف يوميًا',cr.cash===cc2-techFee()+2200&&techOf().earned>=2200);
+      const f0=techFee();techBuy('eff');
+      ok('كفاءة الطاقة بتخفض الرسوم',techFee()<f0);
+      cr.cash=100;
+      ok('مفيش كاش = مفيش ترقية',techUpLab()===false);
+      cr.cash=500000;renderTech();
+      ok('بطاقة التقنية ترسم',$('techBody').innerHTML.includes('مختبر')||$('techBody').innerHTML.includes('المختبر'));
+      S.tech=null;
+    }
+    
+    if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
+    if(S.company){
       const cz=S.company;const RzM=RNG;RNG=()=>0.5;
       S.cris=null;cz.cash=200000;cz.workers=100;
       ok('الأزمات بتبدأ فاضية',crisOf().act===null&&crisOf().handled===0);
