@@ -882,6 +882,83 @@ function renderLobby(){
   if(L.log.length)h+='<div style="margin-top:8px;font-size:11.5px;color:var(--dim);line-height:1.7">'+L.log.slice(-4).reverse().map(function(x){return '• يوم '+x.d+': '+x.t;}).join('<br>')+'</div>';
   el.innerHTML=h;
 }
+
+function qaOf(){
+  if(!S.qa)S.qa={level:0,defects:0,recalls:0,prevented:0,log:[]};
+  if(!S.qa.log)S.qa.log=[];
+  return S.qa;
+}
+function qaCost(l){return [0,12000,35000][l||0];}
+function qaFee(l){return [0,300,900][l||0];}
+function qlog(t){const Q=qaOf();Q.log.push({d:S.day,t:t});if(Q.log.length>8)Q.log.shift();}
+function qaTick(c){
+  const Q=qaOf();
+  if(!c)return;
+  if(Q.level>0)c.cash-=qaFee(Q.level);
+  const q=(c.quality==null?50:c.quality);
+  const morale=(c.morale==null?60:c.morale);
+  const rate=Math.max(0,0.9-q/100*0.7)+Math.max(0,(45-morale)/400);
+  const add=rate*Math.max(0,c.workers||0)*0.06*Math.pow(0.4,Q.level);
+  Q.defects=Math.min(100,(Q.defects||0)+add);
+  if(Q.defects>=70&&!Q.alert){
+    Q.alert=1;
+    pushNews(S,'🔬 عيوب متزايدة في منتجات "'+c.name+'" — محتاج قرار استدعاء',-0.006,true,true);
+    toast('🔬 العيوب فوق الحد — قرر: استدعاء ولا تأجيل');
+  }
+  if(Q.defects>=100){
+    Q.defects=0;Q.alert=0;Q.recalls=(Q.recalls||0)+1;
+    const fine=Math.round(15000+companyValue()*0.01);
+    c.cash-=fine;c.brand=Math.max(0,(c.brand||10)-8);c.rep=Math.max(0,(c.rep||50)-6);
+    qlog('⚠️ فضيحة جودة — غرامة '+fmtD(fine)+' وعلامة -٨');
+    pushNews(S,'⚠️ فضيحة جودة في "'+c.name+'" — استدعاء إجباري وغرامة',-0.02,true,true);
+    toast('⚠️ فضيحة جودة! غرامة '+fmtD(fine));
+  }
+}
+function qaUpgrade(){
+  const c=S.company;if(!c)return false;
+  const Q=qaOf();
+  if(Q.level>=2)return false;
+  const cost=qaCost(Q.level+1);
+  if(c.cash<cost)return false;
+  c.cash-=cost;Q.level++;
+  qlog('🔬 برنامج جودة مستوى '+Q.level+' ('+fmtD(cost)+' + '+fmtD(qaFee(Q.level))+'/يوم)');
+  toast('🔬 برنامج الجودة '+Q.level);
+  save();renderAll();
+  return true;
+}
+function qaRecall(){
+  const c=S.company;if(!c)return false;
+  const Q=qaOf();
+  if((Q.defects||0)<25)return false;
+  const cost=Math.round(4000+Q.defects*250);
+  if(c.cash<cost)return false;
+  c.cash-=cost;
+  Q.prevented=(Q.prevented||0)+1;
+  c.brand=Math.min(100,(c.brand||10)+1);
+  qlog('✅ استدعاء وقائي ('+fmtD(cost)+') — العيوب اتصفّرت');
+  toast('✅ استدعاء وقائي — العيوب اتصفّرت');
+  Q.defects=0;Q.alert=0;
+  save();renderAll();
+  return true;
+}
+function renderQA(){
+  const el=$('qaBody');if(!el)return;
+  const c=S.company;
+  if(!c){el.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا.</div>';return;}
+  const Q=qaOf();
+  const col=Q.defects>=70?'var(--dn)':Q.defects>=35?'var(--gold)':'var(--up)';
+  let h='<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12.5px;margin-bottom:6px">'+
+    '<span>برنامج الجودة: <b>'+Q.level+'/2</b></span>'+
+    '<span>مؤشر العيوب: <b style="color:'+col+'">'+Math.round(Q.defects||0)+'٪</b></span>'+
+    '<span>استدعاءات/وقائية: <b>'+(Q.recalls||0)+'/'+(Q.prevented||0)+'</b></span></div>';
+  h+='<div style="height:6px;background:var(--line);border-radius:4px;overflow:hidden;margin:4px 0 8px"><div style="height:100%;width:'+Math.min(100,Math.round(Q.defects||0))+'%;background:'+col+'"></div></div>';
+  h+='<div class="tradeRow">'+
+    '<button class="btnShort" onclick="qaUpgrade()" '+(Q.level>=2||c.cash<qaCost(Q.level+1)?'disabled':'')+'>🔬 رفع برنامج الجودة ('+fmtD(qaCost(Q.level+1))+' + '+fmtD(qaFee(Q.level+1))+'/يوم)</button>'+
+    '<button class="btnGhost" onclick="qaRecall()" '+((Q.defects||0)<25||c.cash<Math.round(4000+(Q.defects||0)*250)?'disabled':'')+'>📦 استدعاء وقائي ('+fmtD(Math.round(4000+(Q.defects||0)*250))+')</button>'+
+    '</div>';
+  if(Q.log.length)h+='<div style="margin-top:8px;font-size:11.5px;color:var(--dim);line-height:1.7">'+Q.log.slice(-4).reverse().map(function(x){return '• يوم '+x.d+': '+x.t;}).join('<br>')+'</div>';
+  el.innerHTML=h;
+}
 $('btnPrestige').onclick=()=>{
   if(netWorth()<20000000)return;
   showModal('<h2>⭐ البدء كأسطورة</h2><p style="line-height:1.9">هتبدأ من الصفر بكاش أكبر ومضاعف أرباح دائم ×'+(1+0.15*((S.prestige||0)+1)).toFixed(2)+'. هتفقد كل أصولك وشركتك وتقدمك الحالي، وتحتفظ بإنجازاتك ونجومك.</p><div class="tradeRow"><button id="btnPrestigeYes">أكيد، ابدأ من جديد</button></div>');
