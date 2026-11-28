@@ -1220,6 +1220,31 @@ function __suite(){
       ok('بطاقة الجودة ترسم',$('qaBody').innerHTML.includes('الجودة'));
       S.qa=null;RNG=RqM;
     }
+    
+    if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
+    if(S.company){
+      const cs=S.company;const RsM=RNG;
+      cs.cash=300000;cs.rep=70;cs.quality=70;cs.workers=60;
+      S.smug=null;S.qa=null;S.lobby=null;S.tenders=null;S.cbonds=null;S.audit=null;S.bid=null;S.fr=null;
+      RNG=()=>0.5;
+      ok('ملف التهريب بيبدأ فاضي',smugOf().routes.length===0&&smugOf().heat===0);
+      const cs0=cs.cash;
+      ok('فتح خط بيخصم ويرفع الحرارة',smugOpen('إلكترونيات')===true&&smugOf().routes.length===1&&cs.cash<cs0&&smugOf().heat>0);
+      ok('مش خطين لنفس البضاعة',smugOpen('إلكترونيات')===false);
+      const cp=cs.cash;smugTick(cs);
+      ok('الخط بيجيب ربح يومي',cs.cash>cp&&smugOf().profit>0);
+      ok('الحد الأقصى ٣ خطوط',(function(){smugOpen('سجائر');smugOpen('أدوية');return smugOpen('ذهب')===false&&smugOf().routes.length===3;})());
+      const h0=smugOf().heat;cs.cash=200000;
+      ok('التهدئة بتنزل الحرارة وتخصم',smugCool()===true&&smugOf().heat<h0);
+      const r0=cs.rep;cs.cash=200000;smugOf().heat=95;RNG=()=>0.0;
+      smugTick(cs);
+      ok('المداهمة بتصادر وتغرّم وتضرب السمعة',smugOf().busts===1&&smugOf().routes.length===2&&cs.rep<r0);
+      cs.cash=100000;smugOf().heat=10;renderSmug();
+      ok('بطاقة التهريب ترسم',$('smugBody').innerHTML.includes('خطوط'));
+      const n0=smugOf().routes.length;
+      ok('قفل الخط بيشيله',smugClose(0)===true&&smugOf().routes.length===n0-1);
+      S.smug=null;RNG=RsM;
+    }
     renderAll();
     window.__testmode=0;save();ok('حفظ',!!localStorage.getItem('econLive1'));
     localStorage.removeItem('econLive1');window.__testmode=1;S=freshState();renderAll();
