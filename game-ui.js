@@ -1073,6 +1073,76 @@ $('btnPrestige').onclick=()=>{
   };
 };
 
+const TECHS=[
+  {k:'auto',n:'أتمتة الخطوط',ic:'🤖',cost:30,req:null,d:'+٨ د. يوميًا لكل عامل'},
+  {k:'eff',n:'كفاءة الطاقة',ic:'⚡',cost:25,req:null,d:'رسوم المختبر -٥٠٪'},
+  {k:'patent',n:'براءات اختراع',ic:'📜',cost:45,req:'eff',d:'+٤٬٠٠٠ د. يوميًا'},
+  {k:'ai',n:'ذكاء اصطناعي',ic:'🧠',cost:80,req:'auto',d:'+١٤ د. يوميًا لكل عامل'}
+];
+const LAB_UP=[0,25000,60000,120000];
+function techOf(){
+  if(!S.tech)S.tech={lab:0,pts:0,got:{},earned:0,fees:0};
+  const t=S.tech;if(t.lab==null)t.lab=0;if(t.pts==null)t.pts=0;if(!t.got)t.got={};if(t.earned==null)t.earned=0;if(t.fees==null)t.fees=0;
+  return t;
+}
+function techFee(){
+  const t=techOf();
+  return Math.round(t.lab*1200*(t.got.eff?0.5:1));
+}
+function techUpLab(){
+  const t=techOf();const c=S.company;if(!c)return false;
+  if(t.lab>=3)return false;
+  const cost=LAB_UP[t.lab+1];
+  if(c.cash<cost)return false;
+  c.cash-=cost;t.lab++;
+  toast('🔬 المختبر بقى مستوى '+t.lab);
+  if(typeof renderTech==='function')renderTech();
+  return true;
+}
+function techBuy(k){
+  const t=techOf();const d=TECHS.filter(function(x){return x.k===k;})[0];
+  if(!d||t.got[k])return false;
+  if(d.req&&!t.got[d.req])return false;
+  if(t.pts<d.cost)return false;
+  t.pts-=d.cost;t.got[k]=true;
+  toast(d.ic+' فتحت تقنية: '+d.n);
+  pushNews(S,d.ic+' "'+(S.company?S.company.name:'')+'" تطلق تقنية '+d.n,0.004,false,true);
+  if(typeof renderTech==='function')renderTech();
+  return true;
+}
+function techDaily(c){
+  const t=techOf();let v=0;
+  if(t.got.auto)v+=(c.workers||0)*8;
+  if(t.got.ai)v+=(c.workers||0)*14;
+  if(t.got.patent)v+=4000;
+  return v;
+}
+function techTick(c){
+  const t=techOf();
+  if(t.lab>0){
+    const fee=techFee();
+    if(c.cash>=fee){c.cash-=fee;t.fees+=fee;t.pts+=t.lab*3;}
+  }
+  const b=techDaily(c);
+  if(b>0){c.cash+=b;t.earned+=b;}
+}
+function renderTech(){
+  const el=$('techBody');if(!el)return;
+  const t=techOf();const c=S.company;
+  if(!c){el.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا.</div>';return;}
+  let h='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:12.5px;margin-bottom:6px">'+
+    '<div>المختبر: <b>'+t.lab+'/3</b></div><div>نقاط بحث: <b>'+t.pts+'</b></div><div>رسوم يومية: <b>'+fmtD(techFee())+'</b></div></div>';
+  h+='<div class="tradeRow"><button class="btnGhost" onclick="techUpLab()" '+((t.lab>=3||c.cash<(LAB_UP[t.lab+1]||0))?'disabled':'')+'>'+(t.lab>=3?'المختبر في أعلى مستوى':'🔬 ترقية المختبر ('+fmtD(LAB_UP[t.lab+1])+')')+'</button></div>';
+  h+=TECHS.map(function(d){
+    const own=!!t.got[d.k];const lock=d.req&&!t.got[d.req];
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--line);padding:7px 0;font-size:12.5px;flex-wrap:wrap">'+
+      '<span>'+d.ic+' <b>'+d.n+'</b> <span style="color:var(--dim)">'+d.d+' · '+d.cost+' نقطة</span></span>'+
+      '<button class="btnGhost" onclick="techBuy(\''+d.k+'\')" '+((own||lock||t.pts<d.cost)?'disabled':'')+'>'+(own?'✅ مفتوحة':lock?'🔒 محتاج تقنية قبلها':'افتح')+'</button></div>';
+  }).join('');
+  if(t.earned)h+='<div style="margin-top:8px;font-size:11.5px;color:var(--up)">إجمالي دخل التقنيات: '+fmtD(Math.round(t.earned))+'</div>';
+  el.innerHTML=h;
+}
+
 const CRIS=[
   {k:'war',n:'حرب إقليمية',ic:'⚔️',dir:-1,days:8,msg:'خطوط الإمداد اتقطعت والتكاليف زادت'},
   {k:'pandemic',n:'جائحة عالمية',ic:'🦠',dir:-1,days:10,msg:'الطلب نزل والعمال بيغيبوا'},
