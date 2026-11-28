@@ -1250,6 +1250,20 @@ function __suite(){
     
     if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
     if(S.company){
+      const ce=S.company;S.smug=null;S.bizins=null;S.tax=null;
+      ce.branchProfit=5000;ce.rAcq=2000;ce.workers=50;ce.wage=1;
+      smugOf();bizToggle('ops');
+      const dd=dashData();
+      ok('اللوحة بتجمع الدخل ('+dd.income+')',dd.income>=7000&&dd.items.length>=3);
+      ok('اللوحة بتحسب التكاليف',dd.cost>=1100+bizPrem(BIZINS[0]));
+      ok('صافي = دخل - تكلفة',dd.net===Math.round(dd.income-dd.cost));
+      renderDash();
+      ok('بطاقة الإمبراطورية ترسم',$('dashBody').innerHTML.includes('صافي الثروة'));
+      ce.branchProfit=0;ce.rAcq=0;S.bizins=null;
+    }
+    
+    if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
+    if(S.company){
       const RpM=RNG;RNG=()=>0.5;
       S.corp=null;initCorp();S.rIPO=null;
       const r0=rIPOof();
