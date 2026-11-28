@@ -1073,6 +1073,147 @@ $('btnPrestige').onclick=()=>{
   };
 };
 
+function rIPOof(){
+  if(!S.rIPO)S.rIPO={offers:[],next:6,listed:[],acquired:[]};
+  const r=S.rIPO;
+  if(!r.offers)r.offers=[];if(!r.listed)r.listed=[];if(!r.acquired)r.acquired=[];
+  if(r.next==null)r.next=6;
+  return r;
+}
+function rIPOspawn(){
+  const r=rIPOof();
+  if(!S.corp||!S.corp.length)return null;
+  const used=r.offers.concat(r.listed).map(function(o){return o.i;});
+  const free=[];S.corp.forEach(function(cp,i){if(used.indexOf(i)<0)free.push(i);});
+  if(!free.length)return null;
+  const i=free[Math.floor(RNG()*free.length)];
+  const cp=S.corp[i];if(!cp)return null;
+  const shares=1000;
+  const price=Math.max(20,Math.round(cp.value*0.9/shares));
+  const o={i:i,name:cp.n,price:price,shares:shares,left:Math.round(shares*0.6),close:S.day+4,held:0,listed:false};
+  r.offers.push(o);r.next=S.day+14;
+  pushNews(S,'📢 "'+cp.n+'" تعلن طرح '+o.left+' سهم للاكتتاب بسعر '+fmtD(price)+' للسهم',0.004,false,true);
+  toast('📢 طرح جديد: "'+cp.n+'" — '+fmtD(price)+'/سهم');
+  return o;
+}
+function rIPOsub(i,qty){
+  const r=rIPOof();const o=r.offers[i];
+  if(!o||o.listed)return false;
+  qty=Math.max(1,Math.round(qty));
+  if(qty>o.left)qty=o.left;
+  const cost=o.price*qty;
+  if(S.cash<cost)return false;
+  S.cash-=cost;o.left-=qty;o.held=(o.held||0)+qty;
+  toast('📝 اكتتبت في "'+o.name+'": '+qty+' سهم بـ'+fmtD(cost));
+  if(typeof renderRIPO==='function')renderRIPO();
+  return true;
+}
+function rIPOlist(i){
+  const r=rIPOof();const o=r.offers[i];if(!o)return false;
+  const key='س:'+o.name;
+  if(!S.assets[key])S.assets[key]={kind:'stock',name:o.name,sector:'صناعة',price:o.price,base:o.price,vol:0.03,sent:0,trend:0,hist:[o.price],held:0,avg:o.price,short:0,shortAvg:0,div:0.006};
+  S.assets[key].held=(S.assets[key].held||0)+(o.held||0);
+  if(!S.assets[key].avg)S.assets[key].avg=o.price;
+  o.listed=true;
+  r.listed.push({i:o.i,name:o.name,key:key,held:S.assets[key].held||0,shares:o.shares,price:o.price,day:S.day});
+  r.offers.splice(i,1);
+  pushNews(S,'🔔 "'+o.name+'" اتدرجت في البورصة بسعر '+fmtD(o.price)+' للسهم',0.006,true,true);
+  toast('🔔 "'+o.name+'" اتدرجت — السهم متاح للتداول دلوقتي');
+  return true;
+}
+function rIPObuy(idx,qty){
+  const r=rIPOof();const L=r.listed[idx];if(!L)return false;
+  const a=S.assets[L.key];if(!a)return false;
+  qty=Math.max(1,Math.round(qty));
+  const cost=+(a.price*qty).toFixed(2);
+  if(S.cash<cost)return false;
+  S.cash-=cost;a.held=(a.held||0)+qty;
+  a.avg=((a.avg||0)*(a.held-qty)+cost)/Math.max(1,a.held);
+  L.held=a.held;
+  if(typeof renderRIPO==='function')renderRIPO();
+  return true;
+}
+function rIPOsell(idx,qty){
+  const r=rIPOof();const L=r.listed[idx];if(!L)return false;
+  const a=S.assets[L.key];if(!a)return false;
+  qty=Math.min(Math.max(1,Math.round(qty)),a.held||0);
+  if(qty<1)return false;
+  const gain=+(a.price*qty).toFixed(2);
+  S.cash+=gain;a.held-=qty;L.held=a.held;
+  toast('💵 بعت '+qty+' سهم "'+L.name+'" بـ'+fmtD(gain));
+  if(typeof renderRIPO==='function')renderRIPO();
+  return true;
+}
+function rIPOtakeover(idx){
+  const r=rIPOof();const L=r.listed[idx];if(!L)return false;
+  const a=S.assets[L.key];if(!a)return false;
+  const stake=(a.held||0)/L.shares;
+  if(stake<0.51)return false;
+  const cost=Math.round(a.price*(L.shares-(a.held||0))*1.3);
+  if(S.cash<cost)return false;
+  S.cash-=cost;
+  const daily=Math.round(0.0008*((S.corp[L.i]&&S.corp[L.i].n===L.name)?S.corp[L.i].value:400000));
+  r.acquired.push({name:L.name,daily:daily});
+  if(S.corp&&S.corp[L.i]&&S.corp[L.i].n===L.name)S.corp.splice(L.i,1);
+  r.listed.splice(idx,1);
+  delete S.assets[L.key];
+  pushNews(S,'🦈 استحوذت على "'+L.name+'" من البورصة — دخل يومي '+fmtD(daily),0.03,true,true);
+  toast('🦈 استحوذت على "'+L.name+'"! دخل يومي '+fmtD(daily));
+  beep(1300,.25);
+  if(typeof renderRIPO==='function')renderRIPO();
+  return true;
+}
+function rIPTick(){
+  const r=rIPOof();
+  if(S.day>=r.next&&r.offers.length<2)rIPOspawn();
+  for(let i=r.offers.length-1;i>=0;i--){if(S.day>=r.offers[i].close)rIPOlist(i);}
+  r.listed.forEach(function(L){
+    const a=S.assets[L.key];if(!a)return;
+    const cp=S.corp?S.corp[L.i]:null;
+    const fair=(cp&&cp.n===L.name)?Math.max(5,cp.value*0.95/L.shares):a.price;
+    const pull=(fair-a.price)/Math.max(1,a.price);
+    const drift=Math.max(-0.12,Math.min(0.12,pull*0.4))+rnd(-0.03,0.03);
+    a.price=Math.max(0.5,+(a.price*(1+drift)).toFixed(2));
+    a.hist.push(a.price);if(a.hist.length>240)a.hist.shift();
+    L.price=a.price;L.held=a.held||0;
+  });
+}
+function renderRIPO(){
+  const el=$('rIPObody');if(!el)return;
+  const r=rIPOof();
+  let h='';
+  if(r.offers.length){
+    h+=r.offers.map(function(o,i){
+      const left=Math.max(0,o.close-S.day);
+      return '<div style="border:1px solid var(--line);border-radius:12px;padding:9px;margin-bottom:7px">'+
+        '<div style="display:flex;justify-content:space-between;font-size:13px"><b>'+o.name+'</b><span>'+fmtD(o.price)+'/سهم</span></div>'+
+        '<div style="font-size:11.5px;color:var(--dim);margin:3px 0 6px">متاح '+o.left+' من '+o.shares+' سهم · يقفل بعد '+left+' يوم · مكتتبت '+(o.held||0)+'</div>'+
+        '<div class="tradeRow"><button class="btnGhost" onclick="rIPOsub('+i+',10)">اكتتب ١٠</button>'+
+        '<button class="btnGhost" onclick="rIPOsub('+i+',50)">اكتتب ٥٠</button>'+
+        '<button class="btnGhost" onclick="rIPOsub('+i+',100)">اكتتب ١٠٠</button></div></div>';
+    }).join('');
+  }else{
+    h+='<div style="font-size:12px;color:var(--dim);margin-bottom:8px">مفيش طرح مفتوح دلوقتي — أقرب طرح بعد '+Math.max(0,(r.next||S.day)-S.day)+' يوم.</div>';
+  }
+  if(r.listed.length){
+    h+='<div style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px">'+r.listed.map(function(L,i){
+      const a=S.assets[L.key]||{price:L.price,held:L.held||0};
+      const stake=Math.round((a.held||0)/L.shares*100);
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12.5px;padding:5px 0;flex-wrap:wrap">'+
+        '<span><b>'+L.name+'</b> <span style="color:var(--dim)">'+fmtD(a.price)+' · حصتك '+stake+'٪</span></span>'+
+        '<span><button class="btnGhost" onclick="rIPObuy('+i+',10)">اشترِ ١٠</button> '+
+        '<button class="btnGhost" onclick="rIPOsell('+i+',10)">بيع ١٠</button> '+
+        (stake>=51?'<button class="btnGhost" onclick="rIPOtakeover('+i+')" style="border-color:var(--gold);color:var(--gold)">🦈 استحواذ</button>':'')+
+        '</span></div>';
+    }).join('')+'</div>';
+  }
+  if(r.acquired.length){
+    const tot=r.acquired.reduce(function(x,y){return x+y.daily;},0);
+    h+='<div style="margin-top:8px;font-size:11.5px;color:var(--up);line-height:1.7">🏛️ إمبراطوريتك: '+r.acquired.map(function(x){return x.name;}).join(' · ')+' — دخل يومي '+fmtD(tot)+'</div>';
+  }
+  el.innerHTML=h;
+}
+
 const BIZINS=[
   {k:'ops',n:'الأزمات والإضرابات',ic:'🛡️',prem:1200,cover:0.7},
   {k:'tax',n:'الفحص الضريبي',ic:'🧾',prem:900,cover:0.6},
