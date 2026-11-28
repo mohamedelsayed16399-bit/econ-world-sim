@@ -1416,6 +1416,54 @@ function renderLgd(){
   el.innerHTML=h;
 }
 
+function rmrOf(){
+  if(!S.rmr)S.rmr={list:[],ver:0,right:0,lost:0,fees:0,next:2};
+  const r=S.rmr;if(!r.list)r.list=[];if(r.ver==null)r.ver=0;if(r.right==null)r.right=0;if(r.lost==null)r.lost=0;if(r.fees==null)r.fees=0;if(r.next==null)r.next=2;
+  return r;
+}
+function rmrStocks(){return Object.keys(S.assets).filter(function(k){return S.assets[k].kind==='stock';});}
+function rmrSpawn(dir,truth){
+  const r=rmrOf();const ks=rmrStocks();if(!ks.length)return null;
+  const k=ks[Math.floor(RNG()*ks.length)%ks.length];
+  const it={k:k,name:S.assets[k].name,dir:dir||(RNG()<0.5?1:-1),truth:(truth===undefined?RNG()<0.5:truth),left:3,known:false};
+  r.list.unshift(it);r.list=r.list.slice(0,6);
+  return it;
+}
+function rmrVerify(i){
+  const r=rmrOf();const it=r.list[i];if(!it||it.known||it.left<=0)return false;
+  if(S.cash<2000)return false;
+  S.cash-=2000;r.fees+=2000;it.known=true;r.ver++;
+  toast(it.truth?'✅ الإشاعة صحيحة':'❌ الإشاعة كدب');
+  if(typeof renderRmr==='function')renderRmr();
+  return true;
+}
+function rmrTick(){
+  const r=rmrOf();
+  r.list.forEach(function(it){
+    if(it.left<=0)return;
+    it.left--;
+    if(it.left===0){
+      if(it.truth){
+        const a=S.assets[it.k];if(a)a.price=Math.max(0.01,a.price*(1+it.dir*0.08));
+        r.right++;
+      }else r.lost++;
+    }
+  });
+  r.next--;
+  if(r.next<=0){rmrSpawn();r.next=2+Math.floor(RNG()*3);}
+}
+function renderRmr(){
+  const el=$('rmrBody');if(!el)return;
+  const r=rmrOf();
+  let h='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:12.5px;margin-bottom:6px"><div>اتحققت: <b>'+r.ver+'</b></div><div>طلعت صح: <b>'+r.right+'</b></div><div>طلعت كدب: <b>'+r.lost+'</b></div></div>';
+  if(!r.list.length)h+='<div style="color:var(--dim);font-size:13px">مفيش إشاعات دلوقتي.</div>';
+  h+=r.list.map(function(it,i){
+    const st=it.left>0?(it.known?(it.truth?'✅ صحيحة':'❌ كدب'):'❔ مش متأكدة'):(it.truth?'تحققت':'طلعت كدب');
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--line);padding:7px 0;font-size:12.5px;flex-wrap:wrap"><span>'+(it.dir>0?'📈':'📉')+' إشاعة: <b>'+it.name+'</b> '+(it.dir>0?'هيطلع':'هينزل')+' ٨٪ · '+st+(it.left>0?' · '+it.left+' أيام':'')+'</span>'+(it.left>0&&!it.known?'<button class="btnGhost" onclick="rmrVerify('+i+')" '+(S.cash<2000?'disabled':'')+'>تحقق (٢٬٠٠٠ د.)</button>':'')+'</div>';
+  }).join('');
+  el.innerHTML=h;
+}
+
 const CRIS=[
   {k:'war',n:'حرب إقليمية',ic:'⚔️',dir:-1,days:8,msg:'خطوط الإمداد اتقطعت والتكاليف زادت'},
   {k:'pandemic',n:'جائحة عالمية',ic:'🦠',dir:-1,days:10,msg:'الطلب نزل والعمال بيغيبوا'},
@@ -1469,4 +1517,4 @@ function crisTick(c){
     pushNews(S,'انتهى حدث '+a.n+' — الأثر الكلي '+fmtD(Math.round(a.sum)),0,false,a.sum>=0);
     C.act=null;
   }
-    }
+      }
