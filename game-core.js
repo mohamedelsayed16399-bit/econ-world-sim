@@ -109,6 +109,7 @@ function freshState(){
   st.prestige=0;st.gEvent=null;st.cityStatus={};st.challenge=null;st.options=[];st.autopilot=false;st.subsidiary=null;st.weekly=null;st.hof=[];st.mining={rigs:0,upg:0,total:0};st.auction=null;st.empire=[];st.ins={until:0,paid:0};st.followers=0;st.quiz={day:0,streak:0,won:0};st.duel=null;st.duelWins=0;st.fundP=[100,100,100];st.fundHist=[[100],[100],[100]];st.fundH=[0,0,0];st.fundAvg=[0,0,0];st.confDay=-20;st.vc=[];st.vcDeal=null;st.vcNext=3;st.vcWins=0;st.vcLost=0;st.marginPos=null;st.recPeak=100000;st.recBestDay=0;st.hf={on:false,capital:0,hwm:0,fees:0,streak:0};
   st.war={active:null,next:6,shield:0,shieldDays:0,wins:0,losses:0,log:[],blocked:0};
   st.tax={due:0,late:0,hidden:0,next:10,audits:0,filed:0,paid:0,sched:0,hide:false};
+  st.bizins={p:{},paid:0,claims:0,trust:50,log:[],premPaid:0};
   st.allies={list:[],pact:null,heat:0,fines:0,log:[]};
   pushNews(st,'افتتاح السوق العالمية للمحاكاة — حظ موفق أيها المستثمر!',0,false);
   return st;
@@ -127,6 +128,7 @@ function migrate(){
   if(!S.acq)S.acq={list:[],next:5};
   if(S.corp===undefined)S.corp=null;
   if(!S.tax)S.tax={due:0,late:0,hidden:0,next:10,audits:0,filed:0,paid:0,sched:0,hide:false};
+  if(!S.bizins)S.bizins={p:{},paid:0,claims:0,trust:50,log:[],premPaid:0};
   if(!S.contests)S.contests=[];
   if(S.pubAuc===undefined)S.pubAuc=null;
   if(S.nextAuc==null)S.nextAuc=0;
@@ -769,6 +771,7 @@ function runCompany(){
   const subRev=subTick(c);
   const profit=revenue-costs+(c.aucIncome||0)+subRev;
   const pFinal=profit>0?profit*pmult():profit;
+  if(c.strike){const _bk=bizClaim('ops',Math.round(c.workers*22*c.wage*0.65));if(_bk)c.cash+=_bk;}
   taxAccrue(c,revenue*0.65,pFinal);
   
   let branchProfit=0;
@@ -790,6 +793,7 @@ function runCompany(){
   lobbyTick(c);
   qaTick(c);
   taxTick(c);
+  bizTick(c);
   smugTick(c);
   c.cash+=pFinal;
   c.todayRev=revenue;c.todayProfit=pFinal;c.todaySold=Math.round(sold);c.todaySub=subRev;
@@ -1693,4 +1697,4 @@ function supTick(){
     toast('📄 انتهى عقد التوريد مع '+a.name+' — اختار مورد جديد');
     pushNews(S,'📄 انتهى عقد توريد "'+c.name+'" مع "'+a.name+'"',0,false,true);
   }
-                                  }
+     }
