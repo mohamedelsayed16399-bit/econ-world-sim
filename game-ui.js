@@ -959,6 +959,105 @@ function renderQA(){
   if(Q.log.length)h+='<div style="margin-top:8px;font-size:11.5px;color:var(--dim);line-height:1.7">'+Q.log.slice(-4).reverse().map(function(x){return '• يوم '+x.d+': '+x.t;}).join('<br>')+'</div>';
   el.innerHTML=h;
 }
+
+const SMUG_GOODS=[['إلكترونيات','📱',1.0],['سجائر','🚬',0.8],['أدوية','💊',1.3],['قطع غيار','⚙️',0.9],['ذهب','🪙',1.6]];
+function smugOf(){
+  if(!S.smug)S.smug={routes:[],heat:0,busts:0,profit:0,log:[]};
+  if(!S.smug.routes)S.smug.routes=[];
+  if(!S.smug.log)S.smug.log=[];
+  return S.smug;
+}
+function slog(t){const M=smugOf();M.log.push({d:S.day,t:t});if(M.log.length>8)M.log.shift();}
+function smugOpen(goods){
+  const c=S.company;if(!c)return false;
+  const M=smugOf();
+  if(M.routes.length>=3)return false;
+  const g=SMUG_GOODS.find(function(x){return x[0]===goods;});
+  if(!g)return false;
+  if(M.routes.some(function(r){return r.goods===goods;}))return false;
+  const setup=25000;
+  if(c.cash<setup)return false;
+  c.cash-=setup;
+  M.routes.push({goods:g[0],ic:g[1],mult:g[2],since:S.day,earned:0});
+  M.heat=Math.min(100,(M.heat||0)+6);
+  slog('🕶️ خط تهريب جديد: '+g[0]+' ('+fmtD(setup)+')');
+  toast('🕶️ فتحت خط تهريب '+g[0]);
+  save();renderAll();
+  return true;
+}
+function smugTick(c){
+  const M=smugOf();
+  if(!c||!M.routes.length)return;
+  let inc=0;
+  M.routes.forEach(function(r){
+    const gain=Math.round(9000*r.mult*(0.8+RNG()*0.5));
+    r.earned=(r.earned||0)+gain;
+    inc+=gain;
+    M.heat=Math.min(100,(M.heat||0)+1.2*r.mult);
+  });
+  c.cash+=inc;
+  M.profit=(M.profit||0)+inc;
+  if(M.heat>=70&&RNG()<0.06){
+    const fine=Math.round(20000+M.routes.length*8000);
+    const seized=M.routes.shift();
+    c.cash-=fine;
+    c.rep=Math.max(0,(c.rep||50)-7);
+    M.busts=(M.busts||0)+1;
+    M.heat=Math.max(0,M.heat-40);
+    slog('🚨 مداهمة! مصادرة '+(seized?seized.goods:'')+' وغرامة '+fmtD(fine));
+    pushNews(S,'🚨 مداهمة على خطوط تهريب "'+c.name+'" — مصادرة وغرامة '+fmtD(fine),-0.018,true,true);
+    toast('🚨 مداهمة! مصادرة وغرامة '+fmtD(fine));
+  }
+}
+function smugCool(){
+  const c=S.company;if(!c)return false;
+  const M=smugOf();
+  if(!M.heat||c.cash<12000)return false;
+  c.cash-=12000;
+  M.heat=Math.max(0,M.heat-30);
+  slog('🧊 تهدئة الجهات — الحرارة نزلت');
+  toast('🧊 الحرارة نزلت');
+  save();renderAll();
+  return true;
+}
+function smugClose(i){
+  const c=S.company;if(!c)return false;
+  const M=smugOf();const r=M.routes[i];if(!r)return false;
+  M.routes.splice(i,1);
+  M.heat=Math.max(0,M.heat-8);
+  slog('🚪 قفلت خط '+r.goods);
+  toast('🚪 قفلت خط '+r.goods);
+  save();renderAll();
+  return true;
+}
+function renderSmug(){
+  const el=$('smugBody');if(!el)return;
+  const c=S.company;
+  if(!c){el.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا.</div>';return;}
+  const M=smugOf();
+  const col=M.heat>=70?'var(--dn)':M.heat>=40?'var(--gold)':'var(--up)';
+  let h='<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12.5px;margin-bottom:6px">'+
+    '<span>خطوط شغالة: <b>'+M.routes.length+'/3</b></span>'+
+    '<span>حرارة الجهات: <b style="color:'+col+'">'+Math.round(M.heat||0)+'٪</b></span>'+
+    '<span>مداهمات: <b>'+(M.busts||0)+'</b></span></div>';
+  h+='<div style="height:6px;background:var(--line);border-radius:4px;overflow:hidden;margin:4px 0 8px"><div style="height:100%;width:'+Math.min(100,Math.round(M.heat||0))+'%;background:'+col+'"></div></div>';
+  if(M.routes.length){
+    h+=M.routes.map(function(r,i){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--line);padding:7px 0;font-size:12.5px;flex-wrap:wrap">'+
+        '<span>'+r.ic+' <b>'+r.goods+'</b> <span style="color:var(--dim)">ربح تراكمي '+fmtD(r.earned||0)+'</span></span>'+
+        '<button class="btnGhost" onclick="smugClose('+i+')">قفل الخط</button></div>';
+    }).join('');
+  }else{
+    h+='<div style="font-size:12px;color:var(--dim);margin:6px 0">مفيش خطوط شغالة. الافتتاح ٢٥٬٠٠٠ د. لكل خط (حد ٣).</div>';
+  }
+  h+='<div class="tradeRow">'+SMUG_GOODS.map(function(g){
+    const has=M.routes.some(function(r){return r.goods===g[0];});
+    return '<button class="btnShort" onclick="smugOpen(\''+g[0]+'\')" '+(has||M.routes.length>=3?'disabled':'')+'>'+g[1]+' '+g[0]+(has?' ✓':'')+'</button>';
+  }).join('')+'</div>';
+  h+='<div class="tradeRow"><button class="btnGhost" onclick="smugCool()" '+(c.cash<12000?'disabled':'')+'>🧊 تهدئة الجهات (١٢٬٠٠٠)</button></div>';
+  if(M.log.length)h+='<div style="margin-top:8px;font-size:11.5px;color:var(--dim);line-height:1.7">'+M.log.slice(-4).reverse().map(function(x){return '• يوم '+x.d+': '+x.t;}).join('<br>')+'</div>';
+  el.innerHTML=h;
+}
 $('btnPrestige').onclick=()=>{
   if(netWorth()<20000000)return;
   showModal('<h2>⭐ البدء كأسطورة</h2><p style="line-height:1.9">هتبدأ من الصفر بكاش أكبر ومضاعف أرباح دائم ×'+(1+0.15*((S.prestige||0)+1)).toFixed(2)+'. هتفقد كل أصولك وشركتك وتقدمك الحالي، وتحتفظ بإنجازاتك ونجومك.</p><div class="tradeRow"><button id="btnPrestigeYes">أكيد، ابدأ من جديد</button></div>');
