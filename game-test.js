@@ -1250,6 +1250,32 @@ function __suite(){
     
     if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
     if(S.company){
+      const cz=S.company;const RzM=RNG;RNG=()=>0.5;
+      S.cris=null;cz.cash=200000;cz.workers=100;
+      ok('الأزمات بتبدأ فاضية',crisOf().act===null&&crisOf().handled===0);
+      const a0=crisSpawn('war');
+      ok('الحرب بتتولد',!!a0&&crisOf().act.dir===-1&&crisOf().act.left===8);
+      const dIgn=crisDaily(a0,cz);
+      ok('أثر الحرب سالب ('+dIgn+')',dIgn<0);
+      const cc0=cz.cash;ok('التحوط بيخصم',crisRespond('hedge')===true&&cz.cash===cc0-8000);
+      ok('مش بيرد مرتين',crisRespond('adapt')===false);
+      ok('التحوط بيقلل الخسارة',Math.abs(crisDaily(a0,cz))<Math.abs(dIgn));
+      const cb2=cz.cash;crisTick(cz);
+      ok('التيك بيطبق الأثر اليومي',cz.cash===cb2+crisDaily(a0,cz)&&crisOf().act.left===7);
+      crisOf().act.left=1;crisTick(cz);
+      ok('الحدث بينتهي ويتسجل',crisOf().act===null&&crisOf().hist.length===1);
+      const a1=crisSpawn('oil');cz.cash=200000;
+      const g0=crisDaily(a1,cz);crisRespond('adapt');
+      ok('النفط مع التكيف بيضاعف المكسب',g0>0&&crisDaily(a1,cz)>g0);
+      cz.cash=100;
+      ok('مفيش كاش = مش بيرد',(function(){crisOf().act.resp=null;return crisRespond('hedge')===false;})());
+      cz.cash=200000;renderCris();
+      ok('بطاقة الأزمات ترسم',$('crisBody').innerHTML.length>20);
+      S.cris=null;RNG=RzM;
+    }
+    
+    if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
+    if(S.company){
       const ce=S.company;S.smug=null;S.bizins=null;S.tax=null;
       ce.branchProfit=5000;ce.rAcq=2000;ce.workers=50;ce.wage=1;
       smugOf();bizToggle('ops');
