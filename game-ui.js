@@ -1143,6 +1143,71 @@ function renderTech(){
   el.innerHTML=h;
 }
 
+const ROUNDS=[
+  {k:'seed',n:'جولة ملاك (Seed)',ic:'👼',raise:150000,eq:10,pay:1500,boost:4,req:null},
+  {k:'a',n:'السلسلة A',ic:'🚀',raise:500000,eq:15,pay:4500,boost:10,req:'seed'},
+  {k:'b',n:'السلسلة B',ic:'🦄',raise:1500000,eq:20,pay:12000,boost:22,req:'a'}
+];
+function angelOf(){
+  if(!S.angel)S.angel={got:{},paid:0,gained:0,bought:0};
+  const a=S.angel;if(!a.got)a.got={};if(a.paid==null)a.paid=0;if(a.gained==null)a.gained=0;if(a.bought==null)a.bought=0;
+  return a;
+}
+function angelRaise(k){
+  const a=angelOf();const c=S.company;if(!c)return false;
+  const r=ROUNDS.filter(function(x){return x.k===k;})[0];
+  if(!r||a.got[k])return false;
+  if(r.req&&!a.got[r.req])return false;
+  a.got[k]=true;c.cash+=r.raise;
+  toast(r.ic+' دخّلت '+fmtD(r.raise)+' من '+r.n);
+  pushNews(S,r.ic+' "'+c.name+'" تقفل '+r.n+' بـ '+fmtD(r.raise),0.006,false,true);
+  if(typeof renderAngel==='function')renderAngel();
+  return true;
+}
+function angelBuyback(k){
+  const a=angelOf();const c=S.company;if(!c)return false;
+  const r=ROUNDS.filter(function(x){return x.k===k;})[0];
+  if(!r||!a.got[k])return false;
+  const later=ROUNDS.some(function(x){return x.req===k&&a.got[x.k];});
+  if(later)return false;
+  const cost=Math.round(r.raise*1.4);
+  if(c.cash<cost)return false;
+  c.cash-=cost;delete a.got[k];a.bought+=cost;
+  toast('اشتريت حصة المستثمرين: '+r.n);
+  if(typeof renderAngel==='function')renderAngel();
+  return true;
+}
+function angelEq(){const a=angelOf();let e=0;ROUNDS.forEach(function(r){if(a.got[r.k])e+=r.eq;});return e;}
+function angelDaily(c){
+  const a=angelOf();let b=0,p=0;
+  ROUNDS.forEach(function(r){if(a.got[r.k]){b+=(c.workers||0)*r.boost;p+=r.pay;}});
+  return {boost:b,pay:p};
+}
+function angelTick(c){
+  const d=angelDaily(c);const a=angelOf();
+  if(d.boost>0){c.cash+=d.boost;a.gained+=d.boost;}
+  if(d.pay>0){const x=Math.min(d.pay,Math.max(0,c.cash));c.cash-=x;a.paid+=x;}
+}
+function renderAngel(){
+  const el=$('angelBody');if(!el)return;
+  const a=angelOf();const c=S.company;
+  if(!c){el.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا.</div>';return;}
+  const d=angelDaily(c);
+  let h='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:12.5px;margin-bottom:6px">'+
+    '<div>حصتك: <b>'+(100-angelEq())+'٪</b></div><div>دفعات يومية: <b>'+fmtD(d.pay)+'</b></div><div>إضافة يومية: <b>'+fmtD(d.boost)+'</b></div></div>';
+  h+=ROUNDS.map(function(r){
+    const own=!!a.got[r.k];const lock=r.req&&!a.got[r.req];
+    const later=ROUNDS.some(function(x){return x.req===r.k&&a.got[x.k];});
+    let btn;
+    if(own)btn='<button class="btnGhost" onclick="angelBuyback(\''+r.k+'\')" '+((later||c.cash<Math.round(r.raise*1.4))?'disabled':'')+'>اشترِ الحصة ('+fmtD(Math.round(r.raise*1.4))+')</button>';
+    else btn='<button class="btnGhost" onclick="angelRaise(\''+r.k+'\')" '+(lock?'disabled':'')+'>'+(lock?'🔒 محتاج الجولة اللي قبلها':'اقفل الجولة')+'</button>';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--line);padding:7px 0;font-size:12.5px;flex-wrap:wrap">'+
+      '<span>'+r.ic+' <b>'+r.n+'</b> <span style="color:var(--dim)">'+fmtD(r.raise)+' مقابل '+r.eq+'٪ · دفعة '+fmtD(r.pay)+'/يوم</span></span>'+btn+'</div>';
+  }).join('');
+  if(a.gained||a.paid)h+='<div style="margin-top:8px;font-size:11.5px;color:var(--dim)">إضافة تراكمية: '+fmtD(Math.round(a.gained))+' · دفعات للمستثمرين: '+fmtD(Math.round(a.paid))+'</div>';
+  el.innerHTML=h;
+}
+
 const CRIS=[
   {k:'war',n:'حرب إقليمية',ic:'⚔️',dir:-1,days:8,msg:'خطوط الإمداد اتقطعت والتكاليف زادت'},
   {k:'pandemic',n:'جائحة عالمية',ic:'🦠',dir:-1,days:10,msg:'الطلب نزل والعمال بيغيبوا'},
