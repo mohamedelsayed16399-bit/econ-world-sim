@@ -1071,6 +1071,105 @@ $('btnPrestige').onclick=()=>{
     beep(1400,.3);save();renderAll();
   };
 };
+
+const TAX_INC=0.22,TAX_VAT=0.14,TAX_CYCLE=10;
+function taxOf(){
+  if(!S.tax)S.tax={due:0,late:0,hidden:0,next:10,audits:0,filed:0,paid:0,sched:0,hide:false};
+  const t=S.tax;
+  if(t.due==null)t.due=0;if(t.late==null)t.late=0;if(t.hidden==null)t.hidden=0;
+  if(t.next==null)t.next=10;if(t.audits==null)t.audits=0;if(t.filed==null)t.filed=0;
+  if(t.paid==null)t.paid=0;if(t.sched==null)t.sched=0;if(t.hide==null)t.hide=false;
+  return t;
+}
+function taxAccrue(c,revenue,profit){
+  const t=taxOf();
+  const raw=Math.max(0,revenue)*TAX_VAT+Math.max(0,profit)*TAX_INC;
+  if(!(raw>0))return 0;
+  const net=t.hide?raw*0.7:raw;
+  t.due+=net;
+  if(t.hide)t.hidden+=(raw-net);
+  return net;
+}
+function taxPay(){
+  const t=taxOf();const c=S.company;if(!c)return false;
+  const amt=Math.round(t.due);if(amt<=0)return false;
+  if(c.cash<amt)return false;
+  c.cash-=amt;t.paid+=amt;t.due=0;t.sched=0;t.filed=(t.filed||0)+1;
+  toast('🧾 سددت الإقرار الضريبي ('+fmtD(amt)+')');
+  pushNews(S,'سددت "'+c.name+'" إقرارها الضريبي بقيمة '+fmtD(amt),0,false,true);
+  if(typeof renderTax==='function')renderTax();
+  return true;
+}
+function taxSplit(){
+  const t=taxOf();const c=S.company;if(!c)return false;
+  if(t.due<=0||t.sched>0)return false;
+  t.sched=Math.ceil(t.due/5);
+  toast('📆 اتقسّط المستحق على ٥ أيام ('+fmtD(t.sched)+' يوميًا)');
+  if(typeof renderTax==='function')renderTax();
+  return true;
+}
+function taxHideToggle(){
+  const t=taxOf();const c=S.company;if(!c)return false;
+  t.hide=!t.hide;
+  toast(t.hide?'🕶️ سجّل ٣٠٪ أقل من مبيعاتك — المستحق قل والمخاطرة زادت':'✅ رجعت تسجل كل مبيعاتك');
+  if(typeof renderTax==='function')renderTax();
+  return true;
+}
+function taxSettle(){
+  const t=taxOf();const c=S.company;if(!c||t.hidden<=0)return false;
+  const amt=Math.round(t.hidden*0.3);
+  if(c.cash<amt)return false;
+  c.cash-=amt;t.paid+=amt;t.hidden=0;t.hide=false;
+  toast('🤝 تسوية ذاتية: دفعت '+fmtD(amt)+' وسمحت صفحتك');
+  if(typeof renderTax==='function')renderTax();
+  return true;
+}
+function taxTick(c){
+  const t=taxOf();
+  if(t.sched>0&&t.due>0){
+    const amt=Math.min(Math.round(t.sched),Math.round(t.due));
+    if(c.cash>=amt){c.cash-=amt;t.due-=amt;t.paid+=amt;}
+    else{t.late=(t.late||0)+1;}
+    if(t.due<=0){t.due=0;t.sched=0;toast('✅ خلصت أقساط الإقرار الضريبي');}
+  }
+  if(S.day>=t.next){
+    if(t.due>0.5){
+      const pen=Math.round(t.due*0.03);
+      t.due+=pen;t.late=(t.late||0)+1;
+      if(t.late%2===1)toast('⚠️ الإقرار الضريبي اتأخر — غرامة '+fmtD(pen));
+    }
+    t.next=S.day+TAX_CYCLE;
+  }
+  const risk=t.hidden>0?(0.02+Math.min(0.5,t.hidden/2000000)):0;
+  if(risk>0&&RNG()<risk){
+    const fine=Math.round(t.hidden*0.9+Math.max(0,t.due)*0.2);
+    c.cash=Math.max(0,c.cash-fine);c.rep=Math.max(0,(c.rep||50)-8);
+    t.hidden=0;t.audits=(t.audits||0)+1;t.hide=false;
+    pushNews(S,'🚨 فحص ضريبي على "'+c.name+'" — غرامة '+fmtD(fine)+' وسمعة -٨',-0.012,true,true);
+    toast('🚨 فحص ضريبي! غرامة '+fmtD(fine)+' وسمعة -٨');
+  }
+}
+function renderTax(){
+  const el=$('taxBody');if(!el)return;
+  const c=S.company;const t=taxOf();
+  if(!c){el.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا عشان تظهر التزاماتك الضريبية.</div>';return;}
+  const left=Math.max(0,t.next-S.day);
+  const col=(t.due>0&&left<=2)?'var(--dn)':(t.hide?'var(--gold)':'var(--up)');
+  let h='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:12.5px;margin-bottom:6px">'+
+    '<div>المستحق: <b style="color:'+col+'">'+fmtD(Math.round(t.due))+'</b></div>'+
+    '<div>الإقرار الجاي: <b>'+left+' يوم</b></div>'+
+    '<div>مدفوع: <b>'+fmtD(t.paid||0)+'</b></div>'+
+    '<div>مخفي: <b style="color:'+(t.hidden>0?'var(--dn)':'var(--dim)')+'">'+fmtD(Math.round(t.hidden||0))+'</b></div>'+
+    '<div>تأخير: <b>'+(t.late||0)+'</b></div>'+
+    '<div>فحوصات: <b>'+(t.audits||0)+'</b></div></div>';
+  h+='<div class="tradeRow">'+
+    '<button class="btnGhost" onclick="taxPay()" '+(t.due<1?'disabled':'')+'>🧾 سدد الإقرار</button>'+
+    '<button class="btnGhost" onclick="taxSplit()" '+((t.due<1||t.sched>0)?'disabled':'')+'>📆 قسّط ٥ أيام</button>'+
+    '<button class="btnGhost" onclick="taxHideToggle()" style="'+(t.hide?'border-color:var(--gold);color:var(--gold)':'')+'">'+(t.hide?'🕶️ مسجل أقل (شغال)':'🕶️ سجّل ٣٠٪ أقل')+'</button>'+
+    (t.hidden>0?'<button class="btnGhost" onclick="taxSettle()">🤝 تسوية ذاتية</button>':'')+'</div>';
+  if(t.hide||t.hidden>0)h+='<div style="font-size:11.5px;color:var(--gold);margin-top:6px;line-height:1.7">التسجيل الأقل بيخفّض المستحق ٣٠٪، بس بيبني «مبلغ مخفي» مصلحة الضرائب ممكن تكتشفه في فحص: غرامة ٩٠٪ من المخفي + سمعة -٨.</div>';
+  el.innerHTML=h;
+}
 function renderNotifs(){
   const el=$('notifList');if(!el)return;
   el.innerHTML=S.notifs.slice().reverse().map(n=>'<div class="newsItem" style="font-size:13px">'+n.msg+'<div class="nt">اليوم '+n.d+' — '+String(n.hh).padStart(2,'0')+':'+String(n.mm).padStart(2,'0')+'</div></div>').join('')||'<div style="color:var(--dim)">لا إشعارات بعد</div>';
