@@ -1073,6 +1073,45 @@ $('btnPrestige').onclick=()=>{
   };
 };
 
+function dashData(){
+  const c=S.company;
+  const d={cash:S.cash,nw:netWorth(),items:[],income:0,cost:0};
+  if(!c)return d;
+  const bp=c.branchProfit||0;
+  if(bp){d.items.push({n:'🌍 الفروع',v:bp});d.income+=bp;}
+  const ra=c.rAcq||0;
+  if(ra){d.items.push({n:'🦈 شركات مستحوذ عليها',v:ra});d.income+=ra;}
+  if(S.smug&&S.smug.routes&&S.smug.routes.length){const sp=S.smug.routes.length*9000;d.items.push({n:'🕶️ التهريب (تقديري)',v:sp});d.income+=sp;}
+  const b=S.bizins;
+  if(b&&b.p){let pr=0;BIZINS.forEach(function(x){if(b.p[x.k])pr+=bizPrem(x);});if(pr){d.items.push({n:'🛡️ أقساط التأمين',v:-pr});d.cost+=pr;}}
+  const t=S.tax;
+  if(t&&t.due>0){d.items.push({n:'🧾 ضرائب مستحقة (إجمالي)',v:-Math.round(t.due)});}
+  const w=(c.workers||0)*22*(c.wage||1);
+  if(w){d.items.push({n:'👷 أجور العمال',v:-Math.round(w)});d.cost+=w;}
+  d.rep=c.rep||0;d.workers=c.workers||0;d.value=companyValue();
+  d.net=Math.round(d.income-d.cost);
+  return d;
+}
+function renderDash(){
+  const el=$('dashBody');if(!el)return;
+  const c=S.company;
+  if(!c){el.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا عشان تظهر إمبراطوريتك.</div>';}
+  else{
+    const d=dashData();
+    let h='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;font-size:12.5px;margin-bottom:6px">'+
+      '<div>كاش المحفظة: <b>'+fmtD(Math.round(d.cash))+'</b></div>'+
+      '<div>صافي الثروة: <b>'+fmtD(Math.round(d.nw))+'</b></div>'+
+      '<div>قيمة الشركة: <b>'+fmtD(Math.round(d.value))+'</b></div>'+
+      '<div>صافي يومي جانبي: <b style="color:'+(d.net>=0?'var(--up)':'var(--dn)')+'">'+fmtD(d.net)+'</b></div></div>';
+    h+=d.items.map(function(x){
+      return '<div style="display:flex;justify-content:space-between;border-top:1px solid var(--line);padding:5px 0;font-size:12.5px"><span>'+x.n+'</span><b style="color:'+(x.v>=0?'var(--up)':'var(--dn)')+'">'+(x.v>=0?'+':'')+fmtD(Math.round(x.v))+'</b></div>';
+    }).join('');
+    el.innerHTML=h;
+  }
+  const cv=$('dashChart');
+  if(cv&&S.nwHist&&S.nwHist.length>1&&typeof spark==='function'){try{spark(cv,S.nwHist.slice(-120));}catch(e){}}
+}
+
 function rIPOof(){
   if(!S.rIPO)S.rIPO={offers:[],next:6,listed:[],acquired:[]};
   const r=S.rIPO;
