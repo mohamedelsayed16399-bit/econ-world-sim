@@ -999,8 +999,9 @@ function smugTick(c){
   M.profit=(M.profit||0)+inc;
   if(M.heat>=70&&RNG()<0.06){
     const fine=Math.round(20000+M.routes.length*8000);
+    const _ck=bizClaim('cargo',fine);
     const seized=M.routes.shift();
-    c.cash-=fine;
+    c.cash-=(fine-_ck);
     c.rep=Math.max(0,(c.rep||50)-7);
     M.busts=(M.busts||0)+1;
     M.heat=Math.max(0,M.heat-40);
@@ -1071,6 +1072,82 @@ $('btnPrestige').onclick=()=>{
     beep(1400,.3);save();renderAll();
   };
 };
+
+const BIZINS=[
+  {k:'ops',n:'الأزمات والإضرابات',ic:'🛡️',prem:1200,cover:0.7},
+  {k:'tax',n:'الفحص الضريبي',ic:'🧾',prem:900,cover:0.6},
+  {k:'cargo',n:'الشحنات والتهريب',ic:'🚚',prem:700,cover:0.5}
+];
+function bizOf(){
+  if(!S.bizins)S.bizins={p:{},paid:0,claims:0,trust:50,log:[],premPaid:0};
+  const b=S.bizins;
+  if(!b.p)b.p={};if(b.paid==null)b.paid=0;if(b.claims==null)b.claims=0;
+  if(b.trust==null)b.trust=50;if(!b.log)b.log=[];if(b.premPaid==null)b.premPaid=0;
+  return b;
+}
+function bizPrem(pol){
+  const b=bizOf();
+  const disc=Math.max(-0.25,Math.min(0.2,(b.trust-50)/250));
+  return Math.max(100,Math.round(pol.prem*(1-disc)));
+}
+function bizToggle(k){
+  const c=S.company;if(!c)return false;
+  const pol=BIZINS.filter(function(x){return x.k===k;})[0];if(!pol)return false;
+  const b=bizOf();
+  b.p[k]=!b.p[k];
+  toast(b.p[k]?'🛡️ فعّلت بوليصة '+pol.n+' ('+fmtD(bizPrem(pol))+'/يوم)':'⏹️ ألغيت بوليصة '+pol.n);
+  if(typeof renderBizins==='function')renderBizins();
+  return true;
+}
+function bizClaim(kind,amount){
+  const b=bizOf();
+  const pol=BIZINS.filter(function(x){return x.k===kind;})[0];
+  if(!pol||!b.p[kind]||!(amount>0))return 0;
+  const back=Math.round(amount*pol.cover);
+  b.paid+=back;b.claims=(b.claims||0)+1;
+  b.trust=Math.max(0,b.trust-1.5);
+  b.log.push({d:S.day,k:kind,t:back});
+  if(b.log.length>12)b.log.shift();
+  toast(pol.ic+' التأمين غطّى '+fmtD(back)+' من '+fmtD(Math.round(amount)));
+  if(typeof renderBizins==='function')renderBizins();
+  return back;
+}
+function bizTick(c){
+  const b=bizOf();
+  let total=0;
+  BIZINS.forEach(function(pol){if(b.p[pol.k])total+=bizPrem(pol);});
+  if(total>0){
+    if(c.cash>=total){c.cash-=total;b.premPaid+=total;b.trust=Math.min(100,b.trust+0.15);}
+    else{
+      BIZINS.forEach(function(pol){b.p[pol.k]=false;});
+      pushNews(S,'⚠️ بوليصات التأمين التجاري لـ"'+c.name+'" اتلغت — الكاش مش كافي للأقساط',-0.004,true,true);
+      toast('⚠️ التأمين التجاري اتلغى — الكاش مش كافي');
+    }
+  }else if(b.trust<100){b.trust=Math.min(100,b.trust+0.15);}
+}
+function renderBizins(){
+  const el=$('bizinsBody');if(!el)return;
+  const c=S.company;
+  const b=bizOf();
+  if(!c){el.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا عشان تأمّن على شغلك.</div>';return;}
+  let daily=0;
+  BIZINS.forEach(function(pol){if(b.p[pol.k])daily+=bizPrem(pol);});
+  const col=b.claims>3?'var(--dn)':b.claims>0?'var(--gold)':'var(--up)';
+  let h='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:12.5px;margin-bottom:6px">'+
+    '<div>قسط يومي: <b>'+fmtD(daily)+'</b></div>'+
+    '<div>تعويضات: <b style="color:var(--up)">'+fmtD(b.paid||0)+'</b></div>'+
+    '<div>ثقة التأمين: <b style="color:'+col+'">'+Math.round(b.trust)+'٪</b></div></div>';
+  h+=BIZINS.map(function(pol){
+    const on=!!b.p[pol.k];
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--line);padding:7px 0;font-size:12.5px;flex-wrap:wrap">'+
+      '<span>'+pol.ic+' <b>'+pol.n+'</b> <span style="color:var(--dim)">تغطية '+Math.round(pol.cover*100)+'٪ · '+fmtD(bizPrem(pol))+'/يوم</span></span>'+
+      '<button class="btnGhost" onclick="bizToggle(\''+pol.k+'\')" style="'+(on?'border-color:var(--up);color:var(--up)':'')+'">'+(on?'✅ شغالة':'فعّل')+'</button></div>';
+  }).join('');
+  if(b.log.length)h+='<div style="margin-top:8px;font-size:11.5px;color:var(--dim);line-height:1.7">'+b.log.slice(-4).reverse().map(function(x){
+    const pol=BIZINS.filter(function(p){return p.k===x.k;})[0];
+    return '• يوم '+x.d+': '+(pol?pol.ic+' '+pol.n:'')+' غطّت '+fmtD(x.t);}).join('<br>')+'</div>';
+  el.innerHTML=h;
+}
 
 const TAX_INC=0.22,TAX_VAT=0.14,TAX_CYCLE=10;
 function taxOf(){
@@ -1143,7 +1220,8 @@ function taxTick(c){
   const risk=t.hidden>0?(0.02+Math.min(0.5,t.hidden/2000000)):0;
   if(risk>0&&RNG()<risk){
     const fine=Math.round(t.hidden*0.9+Math.max(0,t.due)*0.2);
-    c.cash=Math.max(0,c.cash-fine);c.rep=Math.max(0,(c.rep||50)-8);
+    const _tk=bizClaim('tax',fine);
+    c.cash=Math.max(0,c.cash-(fine-_tk));c.rep=Math.max(0,(c.rep||50)-8);
     t.hidden=0;t.audits=(t.audits||0)+1;t.hide=false;
     pushNews(S,'🚨 فحص ضريبي على "'+c.name+'" — غرامة '+fmtD(fine)+' وسمعة -٨',-0.012,true,true);
     toast('🚨 فحص ضريبي! غرامة '+fmtD(fine)+' وسمعة -٨');
