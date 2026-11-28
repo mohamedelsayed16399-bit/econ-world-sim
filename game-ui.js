@@ -1369,6 +1369,53 @@ function renderCmd(){
   el.innerHTML=h;
 }
 
+const LGD_AI=[
+  {n:'وارن العرب',nw:420000,d:0.0016,v:0.010},
+  {n:'سارة كابيتال',nw:310000,d:0.0020,v:0.016},
+  {n:'مضاربة بلا حدود',nw:250000,d:0.0018,v:0.034},
+  {n:'صندوق النيل',nw:520000,d:0.0012,v:0.008},
+  {n:'حسام الذهب',nw:180000,d:0.0022,v:0.022},
+  {n:'مستثمر الفجر',nw:140000,d:0.0024,v:0.026},
+  {n:'بنك الأهرام',nw:700000,d:0.0010,v:0.006},
+  {n:'تريدر الإسكندرية',nw:200000,d:0.0019,v:0.030}
+];
+function lgdOf(){
+  if(!S.lgd)S.lgd={ai:null,peak:0,best:0,days:0};
+  const g=S.lgd;if(!g.ai)g.ai=LGD_AI.map(function(a){return {n:a.n,nw:a.nw};});
+  if(g.peak==null)g.peak=0;if(g.best==null)g.best=0;if(g.days==null)g.days=0;
+  return g;
+}
+function lgdRank(){
+  const g=lgdOf();const my=netWorth();
+  return 1+g.ai.filter(function(a){return a.nw>my;}).length;
+}
+function lgdTitle(r){return r===1?'👑 ملك السوق':r<=3?'🥇 من الكبار':r<=6?'📈 مستثمر محترف':'🌱 مبتدئ طموح';}
+function lgdTick(){
+  const g=lgdOf();
+  g.ai.forEach(function(a,i){
+    const d=LGD_AI[i];
+    a.nw=Math.max(50000,Math.round(a.nw*(1+d.d+(RNG()-0.5)*2*d.v)));
+  });
+  const my=netWorth();
+  if(my>g.peak)g.peak=my;
+  const r=lgdRank();
+  if(!g.best||r<g.best)g.best=r;
+  g.days++;
+}
+function renderLgd(){
+  const el=$('lgdBody');if(!el)return;
+  const g=lgdOf();const my=netWorth();
+  const all=g.ai.map(function(a){return {n:a.n,nw:a.nw,me:false};});
+  all.push({n:'أنت',nw:my,me:true});
+  all.sort(function(a,b){return b.nw-a.nw;});
+  const r=lgdRank();
+  let h='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:12.5px;margin-bottom:6px"><div>ترتيبك: <b>'+r+'/9</b></div><div>أفضل ترتيب: <b>'+(g.best||r)+'</b></div><div>أعلى ثروة: <b>'+fmtD(Math.round(Math.max(g.peak,my)))+'</b></div></div><div style="font-size:13px;margin-bottom:4px">'+lgdTitle(r)+'</div>';
+  h+=all.map(function(x,i){
+    return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid var(--line);font-size:12.5px;'+(x.me?'color:var(--up);font-weight:700':'')+'"><span>'+(i+1)+'. '+x.n+'</span><span>'+fmtD(Math.round(x.nw))+'</span></div>';
+  }).join('');
+  el.innerHTML=h;
+}
+
 const CRIS=[
   {k:'war',n:'حرب إقليمية',ic:'⚔️',dir:-1,days:8,msg:'خطوط الإمداد اتقطعت والتكاليف زادت'},
   {k:'pandemic',n:'جائحة عالمية',ic:'🦠',dir:-1,days:10,msg:'الطلب نزل والعمال بيغيبوا'},
