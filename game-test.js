@@ -1250,6 +1250,25 @@ function __suite(){
     }
     
     {
+      const Rm=RNG;RNG=()=>0.5;S.cmd=null;S.cash=100000;
+      ok('الأسعار تبدأ',cmdOf().px.oil===80&&cmdOf().pos.length===0);
+      const m0=S.cash;
+      ok('فتح Long نفط بيخصم هامش ١٦٠',cmdOpen('oil',1,1)===true&&S.cash===m0-160&&cmdOf().pos.length===1);
+      cmdOf().px.oil=90;
+      ok('الربح = ١٠٠',cmdPnl(cmdOf().pos[0],cmdOf())===100,'pnl '+cmdPnl(cmdOf().pos[0],cmdOf()));
+      ok('القيمة = هامش + ربح',cmdEquity()===260);
+      ok('قفل بيرجّع الهامش والربح',cmdClose(0)===true&&S.cash===m0+100&&cmdOf().pnl===100);
+      cmdOpen('gold',-1,1);cmdOf().px.gold=260;
+      cmdTick();
+      ok('تصفية الشورت لما السعر يطلع',cmdOf().pos.length===0&&cmdOf().liq===1,'pos '+cmdOf().pos.length+' liq '+cmdOf().liq);
+      S.cash=10;
+      ok('مفيش كاش = مفيش عقد',cmdOpen('oil',1,1)===false);
+      S.cash=100000;renderCmd();
+      ok('بطاقة السلع ترسم',$('cmdBody').innerHTML.includes('نفط'));
+      RNG=Rm;S.cmd=null;
+    }
+    
+    {
       S.wr=null;const wd=S.day;
       ok('أول تقرير بيسجّل خط الأساس',wrMake()===null&&wrOf().nw>0);
       ok('تقدير A لو أحسن من السوق',wrGrade(0.1,0.01)==='A'&&wrGrade(0.0,0.0)==='C'&&wrGrade(-0.2,0)==='F');
