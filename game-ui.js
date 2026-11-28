@@ -606,6 +606,106 @@ function renderAudit(){
   if(a.log&&a.log.length)h+='<div style="margin-top:8px;font-size:11.5px;color:var(--dim);line-height:1.7">'+a.log.slice(-4).reverse().map(function(x){return '• يوم '+x.d+': '+x.t;}).join('<br>')+'</div>';
   b.innerHTML=h;
 }
+
+function cbondOf(){
+  if(!S.cbonds)S.cbonds={list:[],defaults:0,total:0};
+  if(!S.cbonds.list)S.cbonds.list=[];
+  return S.cbonds;
+}
+function creditScore(c){
+  if(!c)return 0;
+  const cash=Math.max(0,c.cash||0);
+  const prof=Math.max(0,c.lastYearProfit||0);
+  const rep=c.rep==null?50:c.rep;
+  return Math.round(Math.min(100,cash/12000+prof/900+rep*0.35));
+}
+function creditGrade(c){
+  const s=creditScore(c);
+  if(s>=85)return {g:'AAA',rate:0.035,ic:'🟢'};
+  if(s>=68)return {g:'AA',rate:0.05,ic:'🟢'};
+  if(s>=50)return {g:'A',rate:0.07,ic:'🟡'};
+  if(s>=32)return {g:'BBB',rate:0.10,ic:'🟠'};
+  if(s>=16)return {g:'BB',rate:0.14,ic:'🔴'};
+  return {g:'B',rate:0.20,ic:'🔴'};
+}
+function cbondTotal(){
+  const b=cbondOf();
+  return b.list.reduce(function(a,x){return a+x.amt;},0);
+}
+function cbondIssue(amt){
+  const c=S.company;if(!c)return false;
+  const b=cbondOf();
+  if(!(amt>0))return false;
+  if(cbondTotal()+amt>600000)return false;
+  const g=creditGrade(c);
+  b.list.push({amt:amt,rate:g.rate,due:S.day+30,day0:S.day});
+  c.cash+=amt;
+  pushNews(S,'📜 "'+c.name+'" تصدر سندات بـ'+fmtD(amt)+' بفايدة '+Math.round(g.rate*100)+'٪',0.004,true,true);
+  toast('📜 إصدار سندات '+fmtD(amt)+' — تصنيف '+g.g);
+  save();renderAll();
+  return true;
+}
+function cbondTick(c){
+  const b=cbondOf();
+  if(!c||!b.list.length)return;
+  let interest=0;
+  b.list.slice().forEach(function(x){
+    interest+=x.amt*x.rate/30;
+    if(S.day>=x.due){
+      const pay=Math.round(x.amt*(1+x.rate));
+      if(c.cash>=pay){
+        c.cash-=pay;
+        b.list.splice(b.list.indexOf(x),1);
+        pushNews(S,'✅ "'+c.name+'" سددت سندات '+fmtD(x.amt)+' في ميعادها',0.006,true,true);
+        toast('✅ سداد سندات '+fmtD(pay));
+      }else{
+        b.list.splice(b.list.indexOf(x),1);
+        b.defaults=(b.defaults||0)+1;
+        c.rep=Math.max(0,(c.rep||50)-8);
+        pushNews(S,'⚠️ "'+c.name+'" عجزت عن سداد سندات '+fmtD(x.amt)+' — تصنيفها الائتماني اتضرب',-0.02,true,true);
+        toast('⚠️ تعثر في سداد السندات — سمعة -8');
+      }
+    }
+  });
+  if(interest>0){c.cash-=interest;b.total=Math.round(interest);}else b.total=0;
+}
+function cbondRepay(i){
+  const c=S.company;if(!c)return false;
+  const b=cbondOf();const x=b.list[i];if(!x)return false;
+  const fee=Math.round(x.amt*x.rate*0.5);
+  const pay=x.amt+fee;
+  if(c.cash<pay)return false;
+  c.cash-=pay;b.list.splice(i,1);
+  toast('📜 سداد مبكر '+fmtD(x.amt)+' + غرامة '+fmtD(fee));
+  save();renderAll();
+  return true;
+}
+function renderCbond(){
+  const el=$('cbondBody');if(!el)return;
+  const c=S.company;
+  if(!c){el.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا.</div>';return;}
+  const b=cbondOf();const g=creditGrade(c);
+  const debt=cbondTotal();
+  let h='<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12.5px;margin-bottom:6px">'+
+    '<span>التصنيف: <b>'+g.ic+' '+g.g+'</b> <span style="color:var(--dim)">(فايدة '+Math.round(g.rate*100)+'٪ سنوي)</span></span>'+
+    '<span>إجمالي الدين: <b>'+fmtD(debt)+'</b></span>'+
+    '<span>فايدة يومية: <b style="color:var(--dn)">'+fmtD(b.total||0)+'</b></span></div>';
+  if(b.defaults)h+='<div style="font-size:12px;color:var(--dn);margin-bottom:6px">⚠️ مرات تعثر: '+b.defaults+'</div>';
+  if(b.list.length){
+    h+=b.list.map(function(x,i){
+      const left=Math.max(0,x.due-S.day);
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--line);padding:7px 0;font-size:12.5px;flex-wrap:wrap">'+
+        '<span><b>'+fmtD(x.amt)+'</b> <span style="color:var(--dim)">فايدة '+Math.round(x.rate*100)+'٪ · متبقي '+left+' يوم</span></span>'+
+        '<button class="btnGhost" onclick="cbondRepay('+i+')">سداد مبكر</button></div>';
+    }).join('');
+  }else{
+    h+='<div style="font-size:12px;color:var(--dim);margin:6px 0">مفيش سندات قائمة. الحد الأقصى للدين ٦٠٠ ألف.</div>';
+  }
+  h+='<div class="tradeRow">'+[50000,150000,400000].map(function(a){
+    return '<button class="btnShort" onclick="cbondIssue('+a+')" '+(debt+a>600000?'disabled':'')+'>إصدار '+fmtD(a)+'</button>';
+  }).join('')+'</div>';
+  el.innerHTML=h;
+}
 $('btnPrestige').onclick=()=>{
   if(netWorth()<20000000)return;
   showModal('<h2>⭐ البدء كأسطورة</h2><p style="line-height:1.9">هتبدأ من الصفر بكاش أكبر ومضاعف أرباح دائم ×'+(1+0.15*((S.prestige||0)+1)).toFixed(2)+'. هتفقد كل أصولك وشركتك وتقدمك الحالي، وتحتفظ بإنجازاتك ونجومك.</p><div class="tradeRow"><button id="btnPrestigeYes">أكيد، ابدأ من جديد</button></div>');
