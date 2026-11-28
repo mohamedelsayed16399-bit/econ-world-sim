@@ -135,6 +135,7 @@ function migrate(){
   if(!S.rIPO)S.rIPO={offers:[],next:6,listed:[],acquired:[]};
   if(!S.cris)S.cris={act:null,next:12,hist:[],handled:0};
   if(!S.tech)S.tech={lab:0,pts:0,got:{},earned:0,fees:0};
+  if(!S.angel)S.angel={got:{},paid:0,gained:0,bought:0};
   if(!S.contests)S.contests=[];
   if(S.pubAuc===undefined)S.pubAuc=null;
   if(S.nextAuc==null)S.nextAuc=0;
@@ -803,6 +804,7 @@ function runCompany(){
   bizTick(c);
   crisTick(c);
   techTick(c);
+  angelTick(c);
   if(rIPOof().acquired.length){let _ac=0;rIPOof().acquired.forEach(function(x){_ac+=x.daily;});const _acp=Math.round(_ac*pmult());c.cash+=_acp;c.rAcq=_acp;}
   smugTick(c);
   c.cash+=pFinal;
@@ -1707,4 +1709,4 @@ function supTick(){
     toast('📄 انتهى عقد التوريد مع '+a.name+' — اختار مورد جديد');
     pushNews(S,'📄 انتهى عقد توريد "'+c.name+'" مع "'+a.name+'"',0,false,true);
   }
-       }
+    }
