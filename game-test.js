@@ -1250,6 +1250,26 @@ function __suite(){
     }
     
     {
+      const Rr=RNG;RNG=()=>0.3;S.rmr=null;S.cash=100000;
+      const kk=rmrStocks()[0];S.assets[kk].price=100;
+      const it=rmrSpawn(1,true);it.k=kk;it.name=S.assets[kk].name;
+      ok('الإشاعة اتولدت',rmrOf().list.length===1&&it.left===3);
+      const c0=S.cash;
+      ok('التحقق بيخصم ٢٠٠٠',rmrVerify(0)===true&&S.cash===c0-2000&&it.known===true);
+      ok('مش بيتحقق مرتين',rmrVerify(0)===false);
+      rmrOf().next=99;rmrTick();rmrTick();
+      ok('لسه مأثرتش',S.assets[kk].price===100&&it.left===1);
+      rmrTick();
+      ok('الصحيحة بتحرك السعر ٨٪',Math.abs(S.assets[kk].price-108)<0.01&&rmrOf().right===1,'price '+S.assets[kk].price);
+      const it2=rmrSpawn(-1,false);it2.k=kk;const p1=S.assets[kk].price;
+      rmrTick();rmrTick();rmrTick();
+      ok('الكدب مبيحركش',S.assets[kk].price===p1&&rmrOf().lost===1,'price '+S.assets[kk].price+' lost '+rmrOf().lost);
+      renderRmr();
+      ok('بطاقة الإشاعات ترسم',$('rmrBody').innerHTML.includes('إشاعة'));
+      RNG=Rr;S.rmr=null;
+    }
+    
+    {
       const Rl=RNG;RNG=()=>0.5;S.lgd=null;
       ok('٨ مستثمرين AI',lgdOf().ai.length===8);
       const r0=lgdRank();
