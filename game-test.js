@@ -483,9 +483,11 @@ function __suite(){
     ok('ضريبة أرباح سنوية',S.cash<ct0);
     ok('مقلدون بعد الربح',S.followers>=1);
     
+    S.quiz={day:-1,streak:0,won:0};if(S.duel)S.duel=null;
     renderQuiz();
     const qz=QUIZ[S.day%QUIZ.length];
-    document.querySelectorAll('.quizOpt')[qz.a].click();
+    var qopts=document.querySelectorAll('.quizOpt');
+    if(qopts[qz.a])qopts[qz.a].click();
     ok('كويز الأكاديمية',S.quiz.day===S.day&&S.quiz.streak>=1&&S.quiz.won>0);
     renderDuel();const cd=S.cash;$('btnDuel').click();
     ok('بدء مبارزة',!!S.duel&&S.cash===cd-10000);
