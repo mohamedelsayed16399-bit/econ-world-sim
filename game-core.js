@@ -138,6 +138,7 @@ function migrate(){
   if(!S.angel)S.angel={got:{},paid:0,gained:0,bought:0};
   if(!S.board)S.board={yes:0,no:0,last:-99,log:[]};
   if(!S.wr)S.wr={day:S.day,nw:0,mkt:0,cards:[]};
+  if(!S.cmd)S.cmd={px:{},pos:[],pnl:0,liq:0};
   if(!S.contests)S.contests=[];
   if(S.pubAuc===undefined)S.pubAuc=null;
   if(S.nextAuc==null)S.nextAuc=0;
@@ -227,6 +228,7 @@ function propsValue(){let v=0;for(const n in S.props){v+=S.props[n].qty*(S.propP
 function netWorth(){
   let n=S.cash+S.dep-S.loan+propsValue();
   for(const k in S.bonds)n+=S.bonds[k].amt*1.04;
+  if(S.cmd&&typeof cmdEquity==='function')n+=cmdEquity();
   for(const k in S.assets){const a=S.assets[k];n+=a.held*a.price;n-=(a.short||0)*a.price;}
   if(S.fundH)for(let i=0;i<3;i++)n+=S.fundH[i]*(S.fundP?S.fundP[i]:100);
   if(S.company&&S.company.ipo&&S.company.ipo.listed&&S.company.ticker&&S.assets[S.company.ticker])n+=S.company.ipo.founder*S.assets[S.company.ticker].price;
@@ -626,6 +628,7 @@ function endOfDay(){
   S.nwHist.push(netWorth());
   if(S.nwHist.length>900)S.nwHist.shift();
   wrTick();
+  cmdTick();
   checkMilestones();
   
   if(S.company&&S.day%30===0)quarterReport();
