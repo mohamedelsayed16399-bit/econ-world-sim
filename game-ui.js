@@ -1208,6 +1208,64 @@ function renderAngel(){
   el.innerHTML=h;
 }
 
+const BOARD_P=[
+  {k:'expand',n:'توسّع: +١٥ عامل',ic:'🏗️',cost:80000},
+  {k:'payout',n:'توزيع أرباح لمحفظتك',ic:'💸',cost:60000},
+  {k:'rd',n:'ميزانية بحث: +٣٠ نقطة',ic:'🔬',cost:50000}
+];
+const BOARD_M=['الحذر 🛡️','النمو 📈','الناشط 🔥'];
+function boardOf(){
+  if(!S.board)S.board={yes:0,no:0,last:-99,log:[]};
+  const b=S.board;if(b.yes==null)b.yes=0;if(b.no==null)b.no=0;if(b.last==null)b.last=-99;if(!b.log)b.log=[];
+  return b;
+}
+function boardVotes(k,c){
+  const p=BOARD_P.filter(function(x){return x.k===k;})[0];
+  if(!p)return null;
+  return [
+    c.cash-p.cost>=200000,
+    k==='expand'||k==='rd',
+    k==='payout'||c.cash>=300000
+  ];
+}
+function boardCan(){const b=boardOf();return (S.day-b.last)>=3;}
+function boardPropose(k){
+  const b=boardOf();const c=S.company;if(!c)return false;
+  const p=BOARD_P.filter(function(x){return x.k===k;})[0];
+  if(!p||!boardCan()||c.cash<p.cost)return false;
+  const v=boardVotes(k,c);const yes=v.filter(Boolean).length;
+  b.last=S.day;
+  if(yes>=2){
+    b.yes++;
+    if(k==='payout'){c.cash-=p.cost;S.cash+=p.cost;}
+    else if(k==='expand'){c.cash-=p.cost;c.workers=(c.workers||0)+15;}
+    else if(k==='rd'){c.cash-=p.cost;techOf().pts+=30;}
+    b.log.unshift(p.ic+' '+p.n+': اتوافق ('+yes+'/3)');
+    toast('🏛️ المجلس وافق ('+yes+'/3)');
+  }else{
+    b.no++;
+    b.log.unshift(p.ic+' '+p.n+': اترفض ('+yes+'/3)');
+    toast('🏛️ المجلس رفض ('+yes+'/3)');
+  }
+  b.log=b.log.slice(0,5);
+  if(typeof renderBoard==='function')renderBoard();
+  return true;
+}
+function renderBoard(){
+  const el=$('boardBody');if(!el)return;
+  const b=boardOf();const c=S.company;
+  if(!c){el.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا.</div>';return;}
+  const wait=Math.max(0,3-(S.day-b.last));
+  let h='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:12.5px;margin-bottom:6px"><div>موافقات: <b>'+b.yes+'</b></div><div>رفض: <b>'+b.no+'</b></div><div>'+(wait?'انتظار: <b>'+wait+' يوم</b>':'<b>المجلس جاهز</b>')+'</div></div>';
+  h+=BOARD_P.map(function(p){
+    const v=boardVotes(p.k,c);
+    const pre=v.map(function(x,i){return BOARD_M[i].split(' ')[1]+(x?'✔':'✖');}).join(' ');
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--line);padding:7px 0;font-size:12.5px;flex-wrap:wrap"><span>'+p.ic+' <b>'+p.n+'</b> <span style="color:var(--dim)">'+fmtD(p.cost)+' · توقع: '+pre+'</span></span><button class="btnGhost" onclick="boardPropose(\''+p.k+'\')" '+((wait||c.cash<p.cost)?'disabled':'')+'>اعرض على المجلس</button></div>';
+  }).join('');
+  if(b.log.length)h+='<div style="margin-top:8px;font-size:11.5px;color:var(--dim)">'+b.log.join('<br>')+'</div>';
+  el.innerHTML=h;
+}
+
 const CRIS=[
   {k:'war',n:'حرب إقليمية',ic:'⚔️',dir:-1,days:8,msg:'خطوط الإمداد اتقطعت والتكاليف زادت'},
   {k:'pandemic',n:'جائحة عالمية',ic:'🦠',dir:-1,days:10,msg:'الطلب نزل والعمال بيغيبوا'},
