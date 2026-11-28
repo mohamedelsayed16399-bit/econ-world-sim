@@ -1717,4 +1717,4 @@ function supTick(){
     toast('📄 انتهى عقد التوريد مع '+a.name+' — اختار مورد جديد');
     pushNews(S,'📄 انتهى عقد توريد "'+c.name+'" مع "'+a.name+'"',0,false,true);
   }
-        }
+    }
