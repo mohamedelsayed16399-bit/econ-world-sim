@@ -111,6 +111,7 @@ function freshState(){
   st.tax={due:0,late:0,hidden:0,next:10,audits:0,filed:0,paid:0,sched:0,hide:false};
   st.bizins={p:{},paid:0,claims:0,trust:50,log:[],premPaid:0};
   st.rIPO={offers:[],next:6,listed:[],acquired:[]};
+  st.cris={act:null,next:12,hist:[],handled:0};
   st.allies={list:[],pact:null,heat:0,fines:0,log:[]};
   pushNews(st,'افتتاح السوق العالمية للمحاكاة — حظ موفق أيها المستثمر!',0,false);
   return st;
@@ -131,6 +132,7 @@ function migrate(){
   if(!S.tax)S.tax={due:0,late:0,hidden:0,next:10,audits:0,filed:0,paid:0,sched:0,hide:false};
   if(!S.bizins)S.bizins={p:{},paid:0,claims:0,trust:50,log:[],premPaid:0};
   if(!S.rIPO)S.rIPO={offers:[],next:6,listed:[],acquired:[]};
+  if(!S.cris)S.cris={act:null,next:12,hist:[],handled:0};
   if(!S.contests)S.contests=[];
   if(S.pubAuc===undefined)S.pubAuc=null;
   if(S.nextAuc==null)S.nextAuc=0;
@@ -797,6 +799,7 @@ function runCompany(){
   qaTick(c);
   taxTick(c);
   bizTick(c);
+  crisTick(c);
   if(rIPOof().acquired.length){let _ac=0;rIPOof().acquired.forEach(function(x){_ac+=x.daily;});const _acp=Math.round(_ac*pmult());c.cash+=_acp;c.rAcq=_acp;}
   smugTick(c);
   c.cash+=pFinal;
@@ -1701,4 +1704,4 @@ function supTick(){
     toast('📄 انتهى عقد التوريد مع '+a.name+' — اختار مورد جديد');
     pushNews(S,'📄 انتهى عقد توريد "'+c.name+'" مع "'+a.name+'"',0,false,true);
   }
-             }
+                            }
