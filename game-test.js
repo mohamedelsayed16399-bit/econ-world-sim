@@ -1250,6 +1250,22 @@ function __suite(){
     }
     
     {
+      const Rl=RNG;RNG=()=>0.5;S.lgd=null;
+      ok('٨ مستثمرين AI',lgdOf().ai.length===8);
+      const r0=lgdRank();
+      ok('الترتيب بين ١ و٩',r0>=1&&r0<=9);
+      const b0=lgdOf().ai[0].nw;lgdTick();
+      ok('الـ AI بيتحرك يوميًا',lgdOf().ai[0].nw>b0&&lgdOf().days===1,'nw '+lgdOf().ai[0].nw+' vs '+b0);
+      ok('أعلى ثروة اتسجلت',lgdOf().peak>0&&lgdOf().best>=1);
+      const cs=S.cash;S.cash=cs+5e8;
+      ok('بثروة ضخمة ترتيبك ١',lgdRank()===1&&lgdTitle(1).includes('ملك'));
+      S.cash=cs;
+      renderLgd();
+      ok('بطاقة الترتيب ترسم',$('lgdBody').innerHTML.includes('أنت'));
+      RNG=Rl;S.lgd=null;
+    }
+    
+    {
       const Rm=RNG;RNG=()=>0.5;S.cmd=null;S.cash=100000;
       ok('الأسعار تبدأ',cmdOf().px.oil===80&&cmdOf().pos.length===0);
       const m0=S.cash;
