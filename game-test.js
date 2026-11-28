@@ -1248,6 +1248,19 @@ function __suite(){
       S.smug=null;RNG=RsM;
     }
     
+    {
+      S.wr=null;const wd=S.day;
+      ok('أول تقرير بيسجّل خط الأساس',wrMake()===null&&wrOf().nw>0);
+      ok('تقدير A لو أحسن من السوق',wrGrade(0.1,0.01)==='A'&&wrGrade(0.0,0.0)==='C'&&wrGrade(-0.2,0)==='F');
+      ok('مفيش تقرير قبل ٧ أيام',(S.day=wd+3,wrTick(),wrOf().cards.length===0));
+      S.day=wd+7;wrOf().nw=netWorth()/1.1;
+      wrTick();
+      ok('تقرير بعد ٧ أيام بتقدير',wrOf().cards.length===1&&'ABCDF'.includes(wrOf().cards[0].g)&&wrOf().cards[0].my>0.09,'cards '+wrOf().cards.length);
+      renderWR();
+      ok('بطاقة التقرير ترسم',$('wrBody').innerHTML.includes('يوم'));
+      S.day=wd;S.wr=null;
+    }
+    
     if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
     if(S.company){
       const cb=S.company;S.board=null;cb.cash=500000;cb.workers=100;S.day=50;
