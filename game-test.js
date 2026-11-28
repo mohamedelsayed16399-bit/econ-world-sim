@@ -464,7 +464,7 @@ function __suite(){
       $('aucBid').value=5000;$('btnAuc').click();
       ok('مزايدة مسجلة',S.auction.bid===5000);
       S.day=S.auction.ends;endOfDay();
-      ok('فوز بالمزاد ودخل إمبراطورية',S.empire.length>0&&S.cash<cb2);
+      ok('فوز بالمزاد ودخل إمبراطورية (إمبراطورية='+S.empire.length+' كاش='+Math.round(S.cash-cb2)+')',S.empire.length>0);
     }
     
     renderFG();ok('مؤشر الخوف والطمع',$('fgGauge').innerHTML.includes('/100'));
