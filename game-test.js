@@ -1099,6 +1099,32 @@ function __suite(){
       ok('بطاقة التدقيق ترسم',$('auditBody').innerHTML.includes('التدقيق'));
       S.audit=null;RNG=RaM;
     }
+    
+    if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
+    if(S.company){
+      const cbb=S.company;const Rb2m=RNG;
+      cbb.cash=400000;cbb.rep=70;cbb.quality=65;cbb.workers=100;cbb.lastYearProfit=60000;
+      S.cbonds=null;S.audit=null;S.bid=null;S.fr=null;
+      RNG=()=>0.5;
+      ok('ملف السندات بيبدأ فاضي',cbondOf().list.length===0&&cbondTotal()===0);
+      const grade=creditGrade(cbb);
+      ok('التصنيف الائتماني محسوب',!!grade.g&&grade.rate>0&&grade.rate<0.25);
+      const cb3=cbb.cash;
+      ok('إصدار سندات بيزود الكاش',cbondIssue(50000)===true&&cbb.cash===cb3+50000&&cbondTotal()===50000);
+      const ci0=cbb.cash;cbondTick(cbb);
+      ok('فايدة يومية بتتخصم',cbb.cash<ci0&&cbondOf().total>0);
+      cbb.cash=500;const rp0=cbb.rep;
+      ok('التعثر عند الاستحقاق بيضرب السمعة',(function(){S.cbonds.list[0].due=S.day;cbondTick(cbb);return cbondOf().list.length===0&&cbondOf().defaults===1&&cbb.rep<rp0;})());
+      S.cbonds=null;cbb.cash=400000;
+      cbondIssue(150000);
+      const cbr=cbb.cash;
+      ok('السداد المبكر بيخصم ويعلم',cbondRepay(0)===true&&cbondTotal()===0&&cbb.cash<cbr);
+      S.cbonds=null;
+      ok('الحد الأقصى للدين ٦٠٠ ألف',(function(){cbondIssue(400000);cbondIssue(150000);cbondIssue(50000);return cbondTotal()===600000&&cbondIssue(100000)===false;})());
+      cbb.cash=400000;renderCbond();
+      ok('بطاقة السندات ترسم',$('cbondBody').innerHTML.includes('التصنيف'));
+      S.cbonds=null;RNG=Rb2m;
+    }
     renderAll();
     window.__testmode=0;save();ok('حفظ',!!localStorage.getItem('econLive1'));
     localStorage.removeItem('econLive1');window.__testmode=1;S=freshState();renderAll();
