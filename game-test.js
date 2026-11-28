@@ -1250,6 +1250,27 @@ function __suite(){
     
     if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
     if(S.company){
+      const cv=S.company;S.angel=null;cv.cash=100000;cv.workers=100;
+      ok('التمويل بيبدأ فاضي',angelEq()===0);
+      ok('A مقفولة من غير seed',angelRaise('a')===false);
+      const v0=cv.cash;
+      ok('جولة seed بتدخّل كاش',angelRaise('seed')===true&&cv.cash===v0+150000&&angelEq()===10);
+      ok('مش بتتقفل مرتين',angelRaise('seed')===false);
+      const v1=cv.cash;angelTick(cv);
+      ok('التيك: إضافة ٤×عمال ناقص دفعة ١٥٠٠',cv.cash===v1+400-1500,'cash '+cv.cash+' vs '+(v1-1100));
+      ok('السلسلة A بعد seed',angelRaise('a')===true&&angelEq()===25);
+      ok('مينفعش تشتري seed وA موجودة',angelBuyback('seed')===false);
+      cv.cash=100;
+      ok('مفيش كاش = مفيش شراء',angelBuyback('a')===false);
+      cv.cash=5e6;const v2=cv.cash;
+      ok('شراء حصة A بيخصم ١٫٤×',angelBuyback('a')===true&&cv.cash===v2-700000&&angelEq()===10);
+      renderAngel();
+      ok('بطاقة التمويل ترسم',$('angelBody').innerHTML.includes('جولة'));
+      S.angel=null;
+    }
+    
+    if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
+    if(S.company){
       const cr=S.company;S.tech=null;cr.cash=500000;cr.workers=100;
       ok('المختبر بيبدأ فاضي',techOf().lab===0&&techOf().pts===0);
       const cp0=cr.cash;
