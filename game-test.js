@@ -1193,6 +1193,33 @@ function __suite(){
       ok('بطاقة اللوبي ترسم',$('lobbyBody').innerHTML.includes('النفوذ'));
       S.lobby=null;RNG=RlM;
     }
+    
+    if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
+    if(S.company){
+      const cq=S.company;const RqM=RNG;
+      cq.cash=300000;cq.quality=70;cq.morale=60;cq.workers=80;cq.brand=50;cq.rep=70;
+      S.qa=null;S.lobby=null;S.tenders=null;S.cbonds=null;S.audit=null;S.bid=null;S.fr=null;
+      RNG=()=>0.5;
+      ok('ملف الجودة بيبدأ صفر',qaOf().level===0&&qaOf().defects===0);
+      qaTick(cq);
+      ok('العيوب بتتراكم',qaOf().defects>0);
+      const q1=cq.cash;const up=qaUpgrade();
+      ok('رفع برنامج الجودة بيخصم',up===true&&qaOf().level===1&&cq.cash<q1);
+      const d1=qaOf().defects;qaTick(cq);
+      const lvl1=qaOf().defects-d1;
+      const old=qaOf();S.qa=null;qaTick(cq);const lvl0=qaOf().defects;S.qa=old;
+      ok('برنامج الجودة بيقلل العيوب ('+lvl0.toFixed(2)+' > '+lvl1.toFixed(2)+')',lvl1<lvl0);
+      qaOf().defects=40;const cr=cq.cash;const br0=cq.brand||10;
+      ok('الاستدعاء الوقائي بيخصم ويصفّر',qaRecall()===true&&cq.cash<cr&&qaOf().defects===0&&(cq.brand||10)>=br0);
+      qaOf().defects=20;
+      ok('الاستدعاء محتاج عيوب كافية',qaRecall()===false);
+      qaOf().defects=100;const r0=cq.rep;const c2=cq.cash;
+      qaTick(cq);
+      ok('الفضيحة بتغرّم وتضرب العلامة',qaOf().recalls===1&&cq.cash<c2&&cq.rep<r0);
+      cq.cash=100000;renderQA();
+      ok('بطاقة الجودة ترسم',$('qaBody').innerHTML.includes('الجودة'));
+      S.qa=null;RNG=RqM;
+    }
     renderAll();
     window.__testmode=0;save();ok('حفظ',!!localStorage.getItem('econLive1'));
     localStorage.removeItem('econLive1');window.__testmode=1;S=freshState();renderAll();
