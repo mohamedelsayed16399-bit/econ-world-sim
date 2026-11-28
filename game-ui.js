@@ -1073,6 +1073,81 @@ $('btnPrestige').onclick=()=>{
   };
 };
 
+const CRIS=[
+  {k:'war',n:'حرب إقليمية',ic:'⚔️',dir:-1,days:8,msg:'خطوط الإمداد اتقطعت والتكاليف زادت'},
+  {k:'pandemic',n:'جائحة عالمية',ic:'🦠',dir:-1,days:10,msg:'الطلب نزل والعمال بيغيبوا'},
+  {k:'oil',n:'اكتشاف نفط ضخم',ic:'🛢️',dir:1,days:8,msg:'طاقة رخيصة وطلب أعلى على الصناعة'}
+];
+const CRIS_RESP={ignore:{n:'تجاهل',cost:0},hedge:{n:'تحوّط',cost:8000},adapt:{n:'تكيّف',cost:20000}};
+function crisOf(){
+  if(!S.cris)S.cris={act:null,next:12,hist:[],handled:0};
+  const c=S.cris;if(c.act===undefined)c.act=null;if(c.next==null)c.next=12;if(!c.hist)c.hist=[];if(c.handled==null)c.handled=0;
+  return c;
+}
+function crisMult(a){
+  const r=a.resp||'ignore';
+  if(a.dir<0)return r==='adapt'?0.1:r==='hedge'?0.4:1;
+  return r==='adapt'?1.8:1;
+}
+function crisDaily(a,c){
+  const base=Math.max(1500,(c.workers||0)*40);
+  return Math.round(base*a.dir*crisMult(a));
+}
+function crisSpawn(k){
+  const C=crisOf();
+  const d=CRIS.filter(function(x){return x.k===k;})[0];if(!d)return null;
+  C.act={k:d.k,n:d.n,ic:d.ic,dir:d.dir,left:d.days,total:d.days,msg:d.msg,resp:null,sum:0};
+  C.next=S.day+25;
+  pushNews(S,d.ic+' '+d.n+': '+d.msg,d.dir<0?-0.02:0.02,true,d.dir>0);
+  toast(d.ic+' '+d.n+' — قرر ردك من كارت الأزمات');
+  return C.act;
+}
+function crisRespond(r){
+  const C=crisOf();const a=C.act;const c=S.company;
+  if(!a||!c||a.resp||!CRIS_RESP[r])return false;
+  const cost=CRIS_RESP[r].cost;
+  if(c.cash<cost)return false;
+  c.cash-=cost;a.resp=r;C.handled++;
+  toast('✅ ردك على '+a.n+': '+CRIS_RESP[r].n);
+  if(typeof renderCris==='function')renderCris();
+  return true;
+}
+function crisTick(c){
+  const C=crisOf();
+  if(!C.act&&S.day>=C.next){
+    const i=Math.floor(RNG()*CRIS.length);crisSpawn(CRIS[Math.min(i,CRIS.length-1)].k);
+  }
+  const a=C.act;if(!a)return;
+  const d=crisDaily(a,c);
+  c.cash+=d;a.sum+=d;a.left--;
+  if(a.left<=0){
+    C.hist.push({n:a.n,ic:a.ic,sum:Math.round(a.sum),resp:a.resp||'ignore'});
+    if(C.hist.length>6)C.hist.shift();
+    pushNews(S,'انتهى حدث '+a.n+' — الأثر الكلي '+fmtD(Math.round(a.sum)),0,false,a.sum>=0);
+    C.act=null;
+  }
+}
+function renderCris(){
+  const el=$('crisBody');if(!el)return;
+  const C=crisOf();const c=S.company;
+  if(!c){el.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا.</div>';return;}
+  let h='';
+  const a=C.act;
+  if(a){
+    const d=crisDaily(a,c);
+    h+='<div style="border:1px solid '+(a.dir<0?'var(--dn)':'var(--up)')+';border-radius:12px;padding:9px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:13px"><b>'+a.ic+' '+a.n+'</b><span>متبقي '+a.left+' يوم</span></div>'+
+      '<div style="font-size:12px;color:var(--dim);margin:3px 0">'+a.msg+' · أثر يومي <b style="color:'+(d>=0?'var(--up)':'var(--dn)')+'">'+(d>=0?'+':'')+fmtD(d)+'</b> · تراكمي '+fmtD(Math.round(a.sum))+'</div>';
+    if(!a.resp){
+      h+='<div class="tradeRow">'+Object.keys(CRIS_RESP).map(function(k){
+        const r=CRIS_RESP[k];return '<button class="btnGhost" onclick="crisRespond(\''+k+'\')" '+(c.cash<r.cost?'disabled':'')+'>'+r.n+(r.cost?' ('+fmtD(r.cost)+')':'')+'</button>';
+      }).join('')+'</div>';
+    }else h+='<div style="font-size:12px;color:var(--up)">ردك: '+CRIS_RESP[a.resp].n+'</div>';
+    h+='</div>';
+  }else h+='<div style="font-size:12px;color:var(--dim);margin-bottom:8px">مفيش حدث دلوقتي — أقرب حدث بعد '+Math.max(0,C.next-S.day)+' يوم.</div>';
+  if(C.hist.length)h+='<div style="font-size:11.5px;color:var(--dim);line-height:1.7">'+C.hist.slice(-4).reverse().map(function(x){return '• '+x.ic+' '+x.n+': '+(x.sum>=0?'+':'')+fmtD(x.sum)+' ('+CRIS_RESP[x.resp].n+')';}).join('<br>')+'</div>';
+  el.innerHTML=h;
+}
+
 function dashData(){
   const c=S.company;
   const d={cash:S.cash,nw:netWorth(),items:[],income:0,cost:0};
