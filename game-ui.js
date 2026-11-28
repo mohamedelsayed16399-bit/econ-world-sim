@@ -706,6 +706,182 @@ function renderCbond(){
   }).join('')+'</div>';
   el.innerHTML=h;
 }
+
+const TENDER_NAMES=['وزارة الصحة — مستلزمات','وزارة التعليم — أجهزة','هيئة النقل — قطع غيار','وزارة الزراعة — معدات','هيئة الكهرباء — كابلات','وزارة الإسكان — مواد بناء'];
+function tenderOf(){
+  if(!S.tenders)S.tenders={list:[],active:[],won:0,lost:0,failed:0,log:[],next:S.day+3};
+  if(!S.tenders.list)S.tenders.list=[];
+  if(!S.tenders.active)S.tenders.active=[];
+  if(!S.tenders.log)S.tenders.log=[];
+  return S.tenders;
+}
+function tlog(t){const T=tenderOf();T.log.push({d:S.day,t:t});if(T.log.length>8)T.log.shift();}
+function tenderSpawn(c,force){
+  const T=tenderOf();
+  if(T.list.length>=3)return false;
+  if(!force&&S.day<(T.next||0))return false;
+  const i=Math.floor(RNG()*TENDER_NAMES.length)%TENDER_NAMES.length;
+  const scale=1+Math.min(4,(c.workers||10)/80);
+  const value=Math.round((60000+RNG()*90000)*scale);
+  T.list.push({id:'t'+S.day+'_'+Math.floor(RNG()*999),name:TENDER_NAMES[i],value:value,
+    cost:Math.round(value*(0.55+RNG()*0.2)),closes:S.day+7,deliver:10});
+  T.next=S.day+10;
+  tlog('📋 مناقصة جديدة: '+TENDER_NAMES[i]+' بـ'+fmtD(value));
+  return true;
+}
+function tenderBid(i,level){
+  const c=S.company;if(!c)return false;
+  const T=tenderOf();const t=T.list[i];if(!t)return false;
+  const mult=level==='low'?0.88:level==='high'?1.06:1.0;
+  const bid=Math.round(t.value*mult);
+  const bond=Math.round(bid*0.02);
+  if(c.cash<bond)return false;
+  c.cash-=bond;
+  const q=(c.quality||50)/100, rep=(c.rep||50)/100;
+  let chance=0.25+rep*0.35+q*0.2+(level==='low'?0.12:level==='high'?-0.12:0)+(S.lobby?(S.lobby.level||0)*0.06:0);
+  chance=Math.max(0.05,Math.min(0.92,chance));
+  T.list.splice(i,1);
+  if(RNG()<chance){
+    T.active.push({name:t.name,bid:bid,cost:t.cost,due:S.day+(t.deliver||10)});
+    tlog('🏛️ فزت بمناقصة '+t.name+' بـ'+fmtD(bid)+' — تسليم بعد '+(t.deliver||10)+' يوم');
+    pushNews(S,'🏛️ "'+c.name+'" تفوز بمناقصة '+t.name+' بـ'+fmtD(bid),0.006,true,true);
+    toast('🏛️ فزت بالمناقصة — سلّم في '+(t.deliver||10)+' يوم');
+  }else{
+    c.cash+=bond;
+    T.lost=(T.lost||0)+1;
+    tlog('❌ مناقصة '+t.name+' راحت لمنافس (تأمين مسترد)');
+    toast('❌ المناقصة راحت لمنافس — التأمين رجع');
+  }
+  save();renderAll();
+  return true;
+}
+function tenderTick(c){
+  const T=tenderOf();
+  if(!c)return;
+  tenderSpawn(c,false);
+  T.list.slice().forEach(function(t){if(S.day>t.closes)T.list.splice(T.list.indexOf(t),1);});
+  T.active.slice().forEach(function(a){
+    if(S.day>=a.due){
+      T.active.splice(T.active.indexOf(a),1);
+      const okDeliver=(c.workers||0)>=15&&(c.inv?c.inv.units:0)>=20;
+      if(okDeliver){
+        const net=a.bid-a.cost;
+        c.cash+=net;
+        c.rep=Math.min(100,(c.rep||50)+3);
+        T.won=(T.won||0)+1;
+        tlog('✅ تسليم مناقصة '+a.name+' — صافي '+fmtD(net));
+        pushNews(S,'✅ "'+c.name+'" سلّمت مناقصة '+a.name+' في الميعاد',0.008,true,true);
+        toast('✅ تسليم ناجح — صافي '+fmtD(net));
+      }else{
+        const fine=Math.round(a.bid*0.15);
+        c.cash-=fine;
+        c.rep=Math.max(0,(c.rep||50)-5);
+        T.failed=(T.failed||0)+1;
+        tlog('⚠️ تأخير في '+a.name+' — غرامة '+fmtD(fine));
+        pushNews(S,'⚠️ "'+c.name+'" تأخرت في مناقصة '+a.name+' — غرامة',-0.01,true,true);
+        toast('⚠️ تأخير في التسليم — غرامة '+fmtD(fine));
+      }
+    }
+  });
+}
+function renderTender(){
+  const el=$('tenderBody');if(!el)return;
+  const c=S.company;
+  if(!c){el.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا.</div>';return;}
+  const T=tenderOf();
+  let h='<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12.5px;margin-bottom:6px">'+
+    '<span>مناقصات مفتوحة: <b>'+T.list.length+'</b></span>'+
+    '<span>عقود جارية: <b>'+T.active.length+'</b></span>'+
+    '<span>فوز/خسارة/تعثر: <b>'+(T.won||0)+'/'+(T.lost||0)+'/'+(T.failed||0)+'</b></span></div>';
+  if(T.list.length){
+    h+=T.list.map(function(t,i){
+      const left=Math.max(0,t.closes-S.day);
+      return '<div style="border-top:1px solid var(--line);padding:8px 0">'+
+        '<div style="font-size:12.5px;margin-bottom:4px"><b>'+t.name+'</b> <span style="color:var(--dim)">قيمة '+fmtD(t.value)+' · متبقي '+left+' يوم</span></div>'+
+        '<div class="tradeRow" style="margin-top:4px">'+
+        '<button class="btnShort" onclick="tenderBid('+i+',\'low\')">منخفض '+fmtD(Math.round(t.value*0.88))+'</button>'+
+        '<button class="btnShort" onclick="tenderBid('+i+',\'fair\')">مناسب '+fmtD(t.value)+'</button>'+
+        '<button class="btnGhost" onclick="tenderBid('+i+',\'high\')">مرتفع '+fmtD(Math.round(t.value*1.06))+'</button>'+
+        '</div></div>';
+    }).join('');
+  }else{
+    h+='<div style="font-size:12px;color:var(--dim);margin:6px 0">مفيش مناقصات مفتوحة دلوقتي — بتظهر كل ~١٠ أيام.</div>';
+  }
+  if(T.active.length){
+    h+='<div style="margin-top:6px;font-size:12.5px">'+T.active.map(function(a){
+      return '<div style="border-top:1px solid var(--line);padding:6px 0"><b>'+a.name+'</b> <span style="color:var(--dim)">تسليم بعد '+Math.max(0,a.due-S.day)+' يوم · صافي متوقع '+fmtD(a.bid-a.cost)+'</span></div>';
+    }).join('')+'</div>';
+  }
+  if(T.log.length)h+='<div style="margin-top:8px;font-size:11.5px;color:var(--dim);line-height:1.7">'+T.log.slice(-4).reverse().map(function(x){return '• يوم '+x.d+': '+x.t;}).join('<br>')+'</div>';
+  el.innerHTML=h;
+}
+
+function lobbyOf(){
+  if(!S.lobby)S.lobby={level:0,heat:0,spent:0,scandals:0,log:[]};
+  if(!S.lobby.log)S.lobby.log=[];
+  return S.lobby;
+}
+function lobbyFee(l){return [0,400,1200,2600][l||0];}
+function lobbyCost(l){return [0,20000,55000,120000][l||0];}
+function llog(t){const L=lobbyOf();L.log.push({d:S.day,t:t});if(L.log.length>8)L.log.shift();}
+function lobbyTick(c){
+  const L=lobbyOf();
+  if(!c||!L.level)return;
+  c.cash-=lobbyFee(L.level);
+  L.heat=Math.min(100,(L.heat||0)+L.level*0.35);
+  L.spent=(L.spent||0)+lobbyFee(L.level);
+  if(L.heat>=70&&RNG()<0.02*L.level){
+    const fine=Math.round(8000*L.level);
+    c.cash-=fine;
+    c.rep=Math.max(0,(c.rep||50)-6);
+    L.scandals=(L.scandals||0)+1;
+    L.heat=Math.max(0,L.heat-35);
+    L.level=Math.max(0,L.level-1);
+    llog('📰 فضيحة علاقات عامة — غرامة '+fmtD(fine)+' ومستوى نزل');
+    pushNews(S,'📰 فضيحة علاقات حكومية في "'+c.name+'" — غرامة '+fmtD(fine),-0.015,true,true);
+    toast('📰 فضيحة! غرامة '+fmtD(fine)+' وسمعة -6');
+  }
+}
+function lobbyHire(){
+  const c=S.company;if(!c)return false;
+  const L=lobbyOf();
+  if(L.level>=3)return false;
+  const cost=lobbyCost(L.level+1);
+  if(c.cash<cost)return false;
+  c.cash-=cost;L.level++;
+  llog('🤝 مستوى علاقات '+L.level+' ('+fmtD(cost)+' + '+fmtD(lobbyFee(L.level))+'/يوم)');
+  toast('🤝 مستوى العلاقات الحكومية '+L.level);
+  save();renderAll();
+  return true;
+}
+function lobbyCool(){
+  const c=S.company;if(!c)return false;
+  const L=lobbyOf();
+  if(!L.heat||c.cash<3000)return false;
+  c.cash-=3000;
+  L.heat=Math.max(0,L.heat-25);
+  llog('🧊 حملة تهدئة إعلامية — الحرارة نزلت');
+  toast('🧊 الحرارة نزلت');
+  save();renderAll();
+  return true;
+}
+function renderLobby(){
+  const el=$('lobbyBody');if(!el)return;
+  const c=S.company;
+  if(!c){el.innerHTML='<div style="color:var(--dim);font-size:13px">أسّس شركة أولًا.</div>';return;}
+  const L=lobbyOf();
+  let h='<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12.5px;margin-bottom:6px">'+
+    '<span>مستوى النفوذ: <b>'+L.level+'/3</b></span>'+
+    '<span>حرارة إعلامية: <b style="color:'+(L.heat>=70?'var(--dn)':'var(--up)')+'">'+Math.round(L.heat||0)+'٪</b></span>'+
+    '<span>فضائح: <b>'+(L.scandals||0)+'</b></span></div>';
+  h+='<div style="font-size:12px;color:var(--dim);margin-bottom:6px">كل مستوى: +٦٪ فرصة فوز في المناقصات · رسوم يومية '+fmtD(lobbyFee(L.level))+'</div>';
+  h+='<div class="tradeRow">'+
+    '<button class="btnShort" onclick="lobbyHire()" '+(L.level>=3||c.cash<lobbyCost(L.level+1)?'disabled':'')+'>🤝 رفع النفوذ ('+fmtD(lobbyCost(L.level+1))+')</button>'+
+    '<button class="btnGhost" onclick="lobbyCool()" '+(c.cash<3000?'disabled':'')+'>🧊 تهدئة إعلامية (٣٬٠٠٠)</button>'+
+    '</div>';
+  if(L.log.length)h+='<div style="margin-top:8px;font-size:11.5px;color:var(--dim);line-height:1.7">'+L.log.slice(-4).reverse().map(function(x){return '• يوم '+x.d+': '+x.t;}).join('<br>')+'</div>';
+  el.innerHTML=h;
+}
 $('btnPrestige').onclick=()=>{
   if(netWorth()<20000000)return;
   showModal('<h2>⭐ البدء كأسطورة</h2><p style="line-height:1.9">هتبدأ من الصفر بكاش أكبر ومضاعف أرباح دائم ×'+(1+0.15*((S.prestige||0)+1)).toFixed(2)+'. هتفقد كل أصولك وشركتك وتقدمك الحالي، وتحتفظ بإنجازاتك ونجومك.</p><div class="tradeRow"><button id="btnPrestigeYes">أكيد، ابدأ من جديد</button></div>');
