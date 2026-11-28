@@ -1304,6 +1304,71 @@ function renderWR(){
   }).join('');
 }
 
+const CMDS=[
+  {k:'oil',n:'نفط',ic:'🛢️',p:80,vol:0.035},
+  {k:'wheat',n:'قمح',ic:'🌾',p:60,vol:0.025},
+  {k:'gold',n:'ذهب',ic:'🥇',p:200,vol:0.015}
+];
+const CMD_SIZE=10;
+function cmdOf(){
+  if(!S.cmd)S.cmd={px:{},pos:[],pnl:0,liq:0};
+  const c=S.cmd;if(!c.px)c.px={};if(!c.pos)c.pos=[];if(c.pnl==null)c.pnl=0;if(c.liq==null)c.liq=0;
+  CMDS.forEach(function(d){if(!c.px[d.k])c.px[d.k]=d.p;});
+  return c;
+}
+function cmdPnl(po,c){return po.dir*(c.px[po.k]-po.entry)*CMD_SIZE*po.qty;}
+function cmdEquity(){
+  const c=cmdOf();let e=0;
+  c.pos.forEach(function(po){e+=po.margin+cmdPnl(po,c);});
+  return e;
+}
+function cmdOpen(k,dir,qty){
+  const c=cmdOf();qty=qty||1;
+  const d=CMDS.filter(function(x){return x.k===k;})[0];
+  if(!d||(dir!==1&&dir!==-1)||c.pos.length>=6)return false;
+  const margin=Math.round(c.px[k]*CMD_SIZE*qty*0.2);
+  if(S.cash<margin)return false;
+  S.cash-=margin;
+  c.pos.push({k:k,dir:dir,qty:qty,entry:c.px[k],margin:margin});
+  if(typeof renderCmd==='function')renderCmd();
+  return true;
+}
+function cmdClose(i){
+  const c=cmdOf();const po=c.pos[i];if(!po)return false;
+  const pnl=cmdPnl(po,c);
+  S.cash+=Math.max(0,po.margin+pnl);c.pnl+=pnl;
+  c.pos.splice(i,1);
+  toast((pnl>=0?'🛢️ ربحت ':'🛢️ خسرت ')+fmtD(Math.abs(Math.round(pnl))));
+  if(typeof renderCmd==='function')renderCmd();
+  return true;
+}
+function cmdTick(){
+  const c=cmdOf();
+  CMDS.forEach(function(d){
+    const x=(RNG()-0.5)*2*d.vol;
+    c.px[d.k]=Math.max(d.p*0.3,Math.round(c.px[d.k]*(1+x)*100)/100);
+  });
+  for(let i=c.pos.length-1;i>=0;i--){
+    const po=c.pos[i];
+    if(po.margin+cmdPnl(po,c)<=0){c.pnl-=po.margin;c.liq++;c.pos.splice(i,1);toast('⚠️ تصفية عقد '+po.k);}
+  }
+}
+function renderCmd(){
+  const el=$('cmdBody');if(!el)return;
+  const c=cmdOf();
+  let h=CMDS.map(function(d){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid var(--line);padding:7px 0;font-size:12.5px;flex-wrap:wrap"><span>'+d.ic+' <b>'+d.n+'</b> <span style="color:var(--dim)">'+c.px[d.k].toFixed(2)+' د. · هامش '+fmtD(Math.round(c.px[d.k]*CMD_SIZE*0.2))+'</span></span><span><button class="btnGhost" onclick="cmdOpen(\''+d.k+'\',1)">Long ▲</button> <button class="btnGhost" onclick="cmdOpen(\''+d.k+'\',-1)">Short ▼</button></span></div>';
+  }).join('');
+  if(c.pos.length){
+    h+='<div style="margin-top:8px;font-size:12.5px"><b>مراكزك:</b></div>'+c.pos.map(function(po,i){
+      const pl=cmdPnl(po,c);const nm=CMDS.filter(function(x){return x.k===po.k;})[0];
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;font-size:12.5px"><span>'+nm.ic+' '+(po.dir>0?'Long':'Short')+' @'+po.entry.toFixed(2)+' · <b style="color:'+(pl>=0?'var(--up)':'var(--down)')+'">'+(pl>=0?'+':'')+fmtD(Math.round(pl))+'</b></span><button class="btnGhost" onclick="cmdClose('+i+')">قفل</button></div>';
+    }).join('');
+  }
+  h+='<div style="margin-top:6px;font-size:11.5px;color:var(--dim)">صافي أرباح السلع: '+fmtD(Math.round(c.pnl))+' · تصفيات: '+c.liq+'</div>';
+  el.innerHTML=h;
+}
+
 const CRIS=[
   {k:'war',n:'حرب إقليمية',ic:'⚔️',dir:-1,days:8,msg:'خطوط الإمداد اتقطعت والتكاليف زادت'},
   {k:'pandemic',n:'جائحة عالمية',ic:'🦠',dir:-1,days:10,msg:'الطلب نزل والعمال بيغيبوا'},
