@@ -1250,6 +1250,43 @@ function __suite(){
     
     if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
     if(S.company){
+      const RpM=RNG;RNG=()=>0.5;
+      S.corp=null;initCorp();S.rIPO=null;
+      const r0=rIPOof();
+      ok('ملف الاكتتابات بيبدأ فاضي',r0.offers.length===0&&r0.listed.length===0&&r0.acquired.length===0);
+      S.day=20;r0.next=1;S.cash=800000;
+      const o=rIPOspawn();
+      ok('طرح جديد بيتولد ('+(o?o.name:'-')+')',!!o&&r0.offers.length===1&&o.left>0&&o.price>0);
+      const c0=S.cash;const oLeft0=o.left,oPrice0=o.price;
+      const subbed=rIPOsub(0,50);
+      ok('الاكتتاب بيخصم ويحجز أسهم (cash='+Math.round(c0)+' price='+oPrice0+' sub='+subbed+' held='+r0.offers[0].held+' left='+r0.offers[0].left+'/'+oLeft0+')',subbed===true&&S.cash<c0&&r0.offers[0].held===50&&r0.offers[0].left===oLeft0-50);
+      S.cash=10;
+      ok('مش بيكتتب من غير كاش',rIPOsub(0,50)===false);
+      S.cash=500000;
+      const on=r0.offers[0].name;r0.offers[0].close=S.day-1;const heldBefore=r0.offers[0].held;
+      rIPTick();
+      ok('الطرح بيتدرج بعد القفل (listed='+r0.listed.length+' held='+heldBefore+' asset='+(!!S.assets['س:'+on])+' ah='+(S.assets['س:'+on]?S.assets['س:'+on].held:'-')+')',r0.listed.length===1&&!!S.assets['س:'+on]&&S.assets['س:'+on].held===heldBefore);
+      const a=S.assets['س:'+on];const cb=S.cash;
+      const bought=rIPObuy(0,10);
+      ok('شراء بعد الإدراج (bought='+bought+' held='+a.held+' cash='+Math.round(S.cash)+'/'+Math.round(cb)+')',bought===true&&a.held===heldBefore+10&&S.cash<cb);
+      const p1=a.price;
+      if(S.corp[0])S.corp[0].value=S.corp[0].value*3;
+      rIPTick();
+      ok('سعر السهم بيتحرك',a.price!==p1&&a.price>0);
+      ok('الاستحواذ مرفوض قبل ٥١٪',rIPOtakeover(0)===false);
+      a.held=520;r0.listed[0].held=520;
+      const nCorp=S.corp.length;
+      ok('الاستحواذ بينجح عند ٥١٪',rIPOtakeover(0)===true&&r0.acquired.length===1&&r0.listed.length===0&&S.corp.length===nCorp-1);
+      ok('الاستحواذ بيدي دخل يومي',r0.acquired[0].daily>0);
+      const ca=S.company.cash;runCompany();
+      ok('الدخل اليومي بيتضاف للشركة',S.company.cash!==ca&&S.company.rAcq>0);
+      renderRIPO();
+      ok('بطاقة الاكتتابات ترسم',$('rIPObody').innerHTML.length>10);
+      S.rIPO=null;RNG=RpM;
+    }
+    
+    if(!S.company){$('coName').value='شركة اختبار';$('btnFound').click();}
+    if(S.company){
       const ci2=S.company;const RbM=RNG;RNG=()=>0.5;
       ci2.cash=400000;S.bizins=null;
       const b0=bizOf();
